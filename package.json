@@ -1,0 +1,20 @@
+{
+  "name": "com.trnkdev.unitylocalization",
+  "version": "0.1.0",
+  "displayName": "TRnK Localization",
+  "description": "A lightweight, synchronous text-first localization package for Unity.",
+  "unity": "6000.0",
+  "dependencies": {
+    "com.trnkdev.unitytoolkit": "2.5.11"
+  },
+  "author": {
+    "name": "Nguyen Thanh Trung",
+    "url": "https://github.com/trnkdev"
+  },
+  "keywords": [
+    "unity",
+    "localization",
+    "i18n",
+    "translation"
+  ]
+}
