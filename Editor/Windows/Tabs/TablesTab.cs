@@ -11,7 +11,7 @@ namespace TRnK.Localization
         public string Title => "Tables";
         public VisualElement Root { get; }
 
-        private LocalizationSettings _settings;
+        private LocalizationConfig _config;
         private SerializedObject _so;
 
         private ListView _tableList;
@@ -98,17 +98,17 @@ namespace TRnK.Localization
             Root.Add(_rightPane);
         }
 
-        public void OnSettingsChanged(LocalizationSettings settings)
+        public void OnConfigChanged(LocalizationConfig config)
         {
-            _settings = settings;
-            _so = settings != null ? new SerializedObject(settings) : null;
+            _config = config;
+            _so = config != null ? new SerializedObject(config) : null;
             RefreshTableList();
             RebuildGrid();
         }
 
         public void OnSelected()
         {
-            if (_settings != null)
+            if (_config != null)
             {
                 _so?.Update();
                 RefreshTableList();
@@ -119,9 +119,9 @@ namespace TRnK.Localization
         private void RefreshTableList()
         {
             _tableNames.Clear();
-            if (_settings != null)
+            if (_config != null)
             {
-                foreach (var table in _settings.Tables)
+                foreach (var table in _config.Tables)
                     _tableNames.Add(string.IsNullOrEmpty(table.Name) ? "(unnamed)" : table.Name);
             }
 
@@ -146,9 +146,9 @@ namespace TRnK.Localization
 
         private void AddTable()
         {
-            if (_settings == null) return;
+            if (_config == null) return;
 
-            Undo.RecordObject(_settings, "Add Localization Table");
+            Undo.RecordObject(_config, "Add Localization Table");
             _so.Update();
             var tablesProp = _so.FindProperty("_tables");
             int newIndex = tablesProp.arraySize;
@@ -158,7 +158,7 @@ namespace TRnK.Localization
             newTable.FindPropertyRelative("_entries").ClearArray();
             _so.ApplyModifiedProperties();
 
-            _settings.InvalidateIndex();
+            _config.InvalidateIndex();
             _selectedTableIndex = newIndex;
             RefreshTableList();
             RebuildGrid();
@@ -166,16 +166,16 @@ namespace TRnK.Localization
 
         private void RemoveSelectedTable()
         {
-            if (_settings == null || _selectedTableIndex < 0) return;
+            if (_config == null || _selectedTableIndex < 0) return;
 
-            Undo.RecordObject(_settings, "Remove Localization Table");
+            Undo.RecordObject(_config, "Remove Localization Table");
             _so.Update();
             var tablesProp = _so.FindProperty("_tables");
             if (_selectedTableIndex < tablesProp.arraySize)
             {
                 tablesProp.DeleteArrayElementAtIndex(_selectedTableIndex);
                 _so.ApplyModifiedProperties();
-                _settings.InvalidateIndex();
+                _config.InvalidateIndex();
             }
 
             _selectedTableIndex = Mathf.Max(0, _selectedTableIndex - 1);
@@ -189,7 +189,7 @@ namespace TRnK.Localization
                 _grid.parent.Remove(_grid);
             _grid = null;
 
-            if (_settings == null || _selectedTableIndex < 0 || _selectedTableIndex >= _settings.Tables.Count)
+            if (_config == null || _selectedTableIndex < 0 || _selectedTableIndex >= _config.Tables.Count)
             {
                 ShowEmptyState();
                 return;
@@ -208,7 +208,7 @@ namespace TRnK.Localization
                 bindCell = (e, row) => BindKeyCell((TextField)e, row),
             });
 
-            var locales = _settings.Locales;
+            var locales = _config.Locales;
             for (int li = 0; li < locales.Count; li++)
             {
                 string localeCode = locales[li].Code;
@@ -244,7 +244,7 @@ namespace TRnK.Localization
         private void BuildVisibleIndices()
         {
             _visibleEntryIndices.Clear();
-            var table = _settings.Tables[_selectedTableIndex];
+            var table = _config.Tables[_selectedTableIndex];
             for (int i = 0; i < table.Entries.Count; i++)
             {
                 if (string.IsNullOrEmpty(_searchFilter)) { _visibleEntryIndices.Add(i); continue; }
@@ -283,11 +283,11 @@ namespace TRnK.Localization
             var field = (TextField)evt.target;
             int entryIndex = (int)field.userData;
 
-            Undo.RecordObject(_settings, "Edit Localization Key");
+            Undo.RecordObject(_config, "Edit Localization Key");
             _so.Update();
             GetEntryProp(entryIndex).FindPropertyRelative("_key").stringValue = evt.newValue;
             _so.ApplyModifiedProperties();
-            _settings.InvalidateIndex();
+            _config.InvalidateIndex();
         }
 
         private void BindValueCell(TextField field, int row, string localeCode)
@@ -315,7 +315,7 @@ namespace TRnK.Localization
             var field = (TextField)evt.target;
             var ctx = (ValueCellContext)field.userData;
 
-            Undo.RecordObject(_settings, "Edit Localization Value");
+            Undo.RecordObject(_config, "Edit Localization Value");
             _so.Update();
             var valuesProp = GetEntryProp(ctx.EntryIndex).FindPropertyRelative("_values");
 
@@ -330,7 +330,7 @@ namespace TRnK.Localization
 
             valuesProp.GetArrayElementAtIndex(slot).FindPropertyRelative("Value").stringValue = evt.newValue;
             _so.ApplyModifiedProperties();
-            _settings.InvalidateIndex();
+            _config.InvalidateIndex();
         }
 
         private static int FindLocaleSlot(SerializedProperty valuesProp, string localeCode)
@@ -346,9 +346,9 @@ namespace TRnK.Localization
 
         private void AddKey()
         {
-            if (_settings == null || _selectedTableIndex < 0) return;
+            if (_config == null || _selectedTableIndex < 0) return;
 
-            Undo.RecordObject(_settings, "Add Localization Key");
+            Undo.RecordObject(_config, "Add Localization Key");
             _so.Update();
             var tablesProp = _so.FindProperty("_tables");
             var tableProp = tablesProp.GetArrayElementAtIndex(_selectedTableIndex);
@@ -361,16 +361,16 @@ namespace TRnK.Localization
 
             var valuesProp = entry.FindPropertyRelative("_values");
             valuesProp.ClearArray();
-            for (int li = 0; li < _settings.Locales.Count; li++)
+            for (int li = 0; li < _config.Locales.Count; li++)
             {
                 valuesProp.InsertArrayElementAtIndex(li);
                 var v = valuesProp.GetArrayElementAtIndex(li);
-                v.FindPropertyRelative("LocaleCode").stringValue = _settings.Locales[li].Code;
+                v.FindPropertyRelative("LocaleCode").stringValue = _config.Locales[li].Code;
                 v.FindPropertyRelative("Value").stringValue = string.Empty;
             }
 
             _so.ApplyModifiedProperties();
-            _settings.InvalidateIndex();
+            _config.InvalidateIndex();
 
             _searchFilter = string.Empty;
             _search?.SetValueWithoutNotify(string.Empty);
@@ -379,19 +379,19 @@ namespace TRnK.Localization
 
         private void RemoveSelectedKey()
         {
-            if (_settings == null || _selectedTableIndex < 0 || _grid == null) return;
+            if (_config == null || _selectedTableIndex < 0 || _grid == null) return;
             int selectedRow = _grid.selectedIndex;
             if (selectedRow < 0 || selectedRow >= _visibleEntryIndices.Count) return;
 
             int entryIndex = _visibleEntryIndices[selectedRow];
 
-            Undo.RecordObject(_settings, "Remove Localization Key");
+            Undo.RecordObject(_config, "Remove Localization Key");
             _so.Update();
             var tablesProp = _so.FindProperty("_tables");
             var tableProp = tablesProp.GetArrayElementAtIndex(_selectedTableIndex);
             tableProp.FindPropertyRelative("_entries").DeleteArrayElementAtIndex(entryIndex);
             _so.ApplyModifiedProperties();
-            _settings.InvalidateIndex();
+            _config.InvalidateIndex();
 
             RebuildGrid();
         }
@@ -405,8 +405,8 @@ namespace TRnK.Localization
             _emptyState.style.alignItems = Align.Center;
             _emptyState.style.justifyContent = Justify.Center;
 
-            var msg = new Label(_settings == null
-                ? "Select a LocalizationSettings asset above."
+            var msg = new Label(_config == null
+                ? "Select a LocalizationConfig asset above."
                 : "No table selected. Add a table to begin.");
             msg.style.unityTextAlign = TextAnchor.MiddleCenter;
             _emptyState.Add(msg);

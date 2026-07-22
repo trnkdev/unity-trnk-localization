@@ -20,9 +20,9 @@ https://github.com/trnkdev/unity-trnk-localization.git
 
 ## Quick Start
 
-**1. Create the settings asset**
+**1. Create the config asset**
 
-`Assets > Create > TRnK Localization > Settings` — place it anywhere inside a `Resources` folder (e.g. `Assets/Resources/LocalizationSettings.asset`).
+`Assets > Create > TRnK > Localization > Config` — place it anywhere inside a `Resources` folder (e.g. `Assets/Resources/LocalizationConfig.asset`).
 
 **2. Author your data**
 
@@ -32,7 +32,7 @@ Open `Tools > TRnK > Localization Manager`:
 
 **3. Initialize from your game bootstrap**
 
-`Loc.Initialize` takes a `LocalizationSettings` instance — load it however your project loads assets (Resources, Addressables, a direct Inspector reference, …) and pass it in.
+`Loc.Initialize` takes a `LocalizationConfig` instance — load it however your project loads assets (Resources, Addressables, a direct Inspector reference, …) and pass it in.
 
 ```csharp
 using TRnK.Localization;
@@ -40,11 +40,11 @@ using UnityEngine;
 
 public class GameBootstrap : MonoBehaviour
 {
-    [SerializeField] LocalizationSettings _localizationSettings;
+    [SerializeField] LocalizationConfig _localizationConfig;
 
     void Awake()
     {
-        Loc.Initialize(_localizationSettings);
+        Loc.Initialize(_localizationConfig);
 
         var save = SaveSystem.Load();
         if (!string.IsNullOrEmpty(save.languageCode))
@@ -122,7 +122,7 @@ Locales in the CSV that aren't registered in settings are skipped with a notice.
 ## Roadmap
 
 ### v0.1 — Runtime Foundation ✅ (complete, tested)
-- Single-asset data model (`LocalizationSettings` holds all locales/tables/keys)
+- Single-asset data model (`LocalizationConfig` holds all locales/tables/keys)
 - Synchronous `Loc` facade: `Initialize` (settings instance), `Get`, `SetLocale`, `LocaleChanged`, `IsReady`
 - Current-locale → default-locale fallback; empty values treated as missing
 - `LocalizedString` serializable reference + `LocalizedText` TMP component

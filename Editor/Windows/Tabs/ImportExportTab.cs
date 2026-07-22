@@ -12,7 +12,7 @@ namespace TRnK.Localization
         public string Title => "Import / Export";
         public VisualElement Root { get; }
 
-        private LocalizationSettings _settings;
+        private LocalizationConfig _config;
         private VisualElement _body;
 
         private CsvDiff.ParsedCsv _pendingCsv;
@@ -33,9 +33,9 @@ namespace TRnK.Localization
             Root.Add(_body);
         }
 
-        public void OnSettingsChanged(LocalizationSettings settings)
+        public void OnConfigChanged(LocalizationConfig config)
         {
-            _settings = settings;
+            _config = config;
             _pendingCsv = null;
             _pendingDiff = null;
             Rebuild();
@@ -47,9 +47,9 @@ namespace TRnK.Localization
         {
             _body.Clear();
 
-            if (_settings == null)
+            if (_config == null)
             {
-                _body.Add(new Label("Select a LocalizationSettings asset above.") { style = { marginTop = 16 } });
+                _body.Add(new Label("Select a LocalizationConfig asset above.") { style = { marginTop = 16 } });
                 return;
             }
 
@@ -82,7 +82,7 @@ namespace TRnK.Localization
         private void DoExport()
         {
             var path = EditorUtility.SaveFilePanel("Export Localization CSV", "",
-                $"{_settings.name}.csv", "csv");
+                $"{_config.name}.csv", "csv");
             if (string.IsNullOrEmpty(path)) return;
 
             var rows = BuildExportRows();
@@ -107,7 +107,7 @@ namespace TRnK.Localization
 
             var header = new List<string> { "Table", "Key" };
             var localeCodes = new List<string>();
-            foreach (var l in _settings.Locales)
+            foreach (var l in _config.Locales)
             {
                 if (string.IsNullOrEmpty(l.Code)) continue;
                 localeCodes.Add(l.Code);
@@ -115,7 +115,7 @@ namespace TRnK.Localization
             }
             rows.Add(header);
 
-            foreach (var table in _settings.Tables)
+            foreach (var table in _config.Tables)
             {
                 foreach (var entry in table.Entries)
                 {
@@ -181,7 +181,7 @@ namespace TRnK.Localization
             }
 
             _pendingCsv = CsvDiff.Structure(grid);
-            _pendingDiff = CsvDiff.Compute(_settings, _pendingCsv);
+            _pendingDiff = CsvDiff.Compute(_config, _pendingCsv);
             Rebuild();
         }
 
@@ -211,7 +211,7 @@ namespace TRnK.Localization
             if (_pendingDiff.LocalesNotInSettings.Count > 0)
             {
                 _body.Add(new HelpBox(
-                    "CSV contains locales not in settings (will be skipped): " +
+                    "CSV contains locales not in config (will be skipped): " +
                     string.Join(", ", _pendingDiff.LocalesNotInSettings),
                     HelpBoxMessageType.Info));
             }
@@ -219,7 +219,7 @@ namespace TRnK.Localization
             if (_mode == ImportMode.MergeCsvWins && _pendingDiff.LocalesInSettingsNotInCsv.Count > 0)
             {
                 _body.Add(new HelpBox(
-                    "These settings locales aren't in the CSV and will be preserved: " +
+                    "These config locales aren't in the CSV and will be preserved: " +
                     string.Join(", ", _pendingDiff.LocalesInSettingsNotInCsv),
                     HelpBoxMessageType.Info));
             }
@@ -264,18 +264,18 @@ namespace TRnK.Localization
 
         private void ApplyImport()
         {
-            if (_settings == null || _pendingCsv == null) return;
+            if (_config == null || _pendingCsv == null) return;
 
-            Undo.RecordObject(_settings, "Import Localization CSV");
+            Undo.RecordObject(_config, "Import Localization CSV");
 
             if (_mode == ImportMode.ReplaceAll)
                 ApplyReplace();
             else
                 ApplyMerge();
 
-            _settings.InvalidateIndex();
-            EditorUtility.SetDirty(_settings);
-            AssetDatabase.SaveAssetIfDirty(_settings);
+            _config.InvalidateIndex();
+            EditorUtility.SetDirty(_config);
+            AssetDatabase.SaveAssetIfDirty(_config);
 
             Log.Info("Localization CSV import applied.");
             _pendingCsv = null;
@@ -285,7 +285,7 @@ namespace TRnK.Localization
 
         private void ApplyMerge()
         {
-            var so = new SerializedObject(_settings);
+            var so = new SerializedObject(_config);
             so.Update();
 
             foreach (var (tableName, csvTable) in _pendingCsv.Data)
@@ -300,7 +300,7 @@ namespace TRnK.Localization
 
                     foreach (var (locale, value) in csvKey)
                     {
-                        if (!_settings.HasLocale(locale)) continue;
+                        if (!_config.HasLocale(locale)) continue;
                         SetLocaleValue(valuesProp, locale, value);
                     }
                 }
@@ -311,7 +311,7 @@ namespace TRnK.Localization
 
         private void ApplyReplace()
         {
-            var so = new SerializedObject(_settings);
+            var so = new SerializedObject(_config);
             so.Update();
 
             var tablesProp = so.FindProperty("_tables");
@@ -337,7 +337,7 @@ namespace TRnK.Localization
 
                     foreach (var (locale, value) in csvKey)
                     {
-                        if (!_settings.HasLocale(locale)) continue;
+                        if (!_config.HasLocale(locale)) continue;
                         int vi = valuesProp.arraySize;
                         valuesProp.InsertArrayElementAtIndex(vi);
                         var v = valuesProp.GetArrayElementAtIndex(vi);

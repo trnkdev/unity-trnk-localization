@@ -9,8 +9,8 @@ using Sirenix.OdinInspector;
 
 namespace TRnK.Localization
 {
-    [CreateAssetMenu(menuName = "TRnK Localization/Settings", fileName = "LocalizationSettings")]
-    public sealed class LocalizationSettings :
+    [CreateAssetMenu(fileName = "LocalizationConfig", menuName = "TRnK/Localization/Config")]
+    public sealed class LocalizationConfig :
 #if ODIN_INSPECTOR
         SerializedScriptableObject
 #else
@@ -80,7 +80,7 @@ namespace TRnK.Localization
 
                 if (_index.ContainsKey(table.Name))
                 {
-                    Log.Warn($"Duplicate table name '{table.Name}' in LocalizationSettings '{name}'.");
+                    Log.Warn($"Duplicate table name '{table.Name}' in LocalizationConfig '{name}'.");
                     continue;
                 }
 

@@ -2,7 +2,7 @@
 
 ### First Release
 
-- Single-asset data model (`LocalizationSettings` holds all locales/tables/keys).
+- Single-asset data model (`LocalizationConfig` holds all locales/tables/keys).
 - Synchronous `Loc` facade: `Initialize` (settings instance), `Get`, `SetLocale`, `LocaleChanged`, `IsReady`.
 - Current-locale to default-locale fallback; empty values treated as missing.
 - `LocalizedString` serializable reference and `LocalizedText` TMP component.

@@ -14,7 +14,7 @@ namespace TRnK.Localization
         private const string TitleText = "TRnK Localization";
         private const string LastAssetGuidPref = "TRnK.Localization.LastAssetGuid";
 
-        private ObjectField _settingsField;
+        private ObjectField _configField;
         private Label _statusLabel;
         private VisualElement _content;
         private Dictionary<string, Button> _tabButtons;
@@ -22,7 +22,7 @@ namespace TRnK.Localization
         private ITab[] _tabs;
         private ITab _activeTab;
 
-        private LocalizationSettings _settings;
+        private LocalizationConfig _config;
 
         [MenuItem(MenuPath)]
         private static void Open()
@@ -62,15 +62,15 @@ namespace TRnK.Localization
 
         private void BindUI()
         {
-            _settingsField = rootVisualElement.Q<ObjectField>("settingsField");
-            _settingsField.objectType = typeof(LocalizationSettings);
-            _settingsField.RegisterValueChangedCallback(evt =>
-                ApplySettings(evt.newValue as LocalizationSettings));
+            _configField = rootVisualElement.Q<ObjectField>("settingsField");
+            _configField.objectType = typeof(LocalizationConfig);
+            _configField.RegisterValueChangedCallback(evt =>
+                ApplyConfig(evt.newValue as LocalizationConfig));
 
             var locateBtn = rootVisualElement.Q<Button>("locateButton");
             locateBtn.clicked += () =>
             {
-                if (_settings != null) EditorGUIUtility.PingObject(_settings);
+                if (_config != null) EditorGUIUtility.PingObject(_config);
             };
 
             _statusLabel = rootVisualElement.Q<Label>("statusLabel");
@@ -129,13 +129,13 @@ namespace TRnK.Localization
             tab.OnSelected();
         }
 
-        private void ApplySettings(LocalizationSettings settings)
+        private void ApplyConfig(LocalizationConfig config)
         {
-            _settings = settings;
+            _config = config;
 
-            if (settings != null)
+            if (config != null)
             {
-                var path = AssetDatabase.GetAssetPath(settings);
+                var path = AssetDatabase.GetAssetPath(config);
                 var guid = AssetDatabase.AssetPathToGUID(path);
                 EditorPrefs.SetString(LastAssetGuidPref, guid);
             }
@@ -145,8 +145,8 @@ namespace TRnK.Localization
             }
 
             // Sync the field UI without re-firing the change callback
-            if (_settingsField != null && _settingsField.value != settings)
-                _settingsField.SetValueWithoutNotify(settings);
+            if (_configField != null && _configField.value != config)
+                _configField.SetValueWithoutNotify(config);
 
             UpdateStatus();
             BroadcastToTabs();
@@ -160,30 +160,30 @@ namespace TRnK.Localization
             var path = AssetDatabase.GUIDToAssetPath(guid);
             if (string.IsNullOrEmpty(path)) { UpdateStatus(); return; }
 
-            var asset = AssetDatabase.LoadAssetAtPath<LocalizationSettings>(path);
-            ApplySettings(asset);
+            var asset = AssetDatabase.LoadAssetAtPath<LocalizationConfig>(path);
+            ApplyConfig(asset);
         }
 
         private void BroadcastToTabs()
         {
             if (_tabs == null) return;
-            foreach (var tab in _tabs) tab.OnSettingsChanged(_settings);
+            foreach (var tab in _tabs) tab.OnConfigChanged(_config);
         }
 
         private void UpdateStatus()
         {
             if (_statusLabel == null) return;
 
-            if (_settings == null)
+            if (_config == null)
             {
-                _statusLabel.text = "No settings selected";
+                _statusLabel.text = "No config selected";
                 return;
             }
 
-            int locales = _settings.Locales?.Count ?? 0;
-            int tables = _settings.Tables?.Count ?? 0;
+            int locales = _config.Locales?.Count ?? 0;
+            int tables = _config.Tables?.Count ?? 0;
             int keys = 0;
-            foreach (var t in _settings.Tables) keys += t.Entries?.Count ?? 0;
+            foreach (var t in _config.Tables) keys += t.Entries?.Count ?? 0;
 
             _statusLabel.text = $"{locales} locales · {tables} tables · {keys} keys";
         }

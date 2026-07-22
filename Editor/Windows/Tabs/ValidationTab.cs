@@ -9,7 +9,7 @@ namespace TRnK.Localization
         public string Title => "Validation";
         public VisualElement Root { get; }
 
-        private LocalizationSettings _settings;
+        private LocalizationConfig _config;
         private VisualElement _body;
 
         internal ValidationTab()
@@ -24,9 +24,9 @@ namespace TRnK.Localization
             Root.Add(_body);
         }
 
-        public void OnSettingsChanged(LocalizationSettings settings)
+        public void OnConfigChanged(LocalizationConfig config)
         {
-            _settings = settings;
+            _config = config;
             Rebuild();
         }
 
@@ -36,9 +36,9 @@ namespace TRnK.Localization
         {
             _body.Clear();
 
-            if (_settings == null)
+            if (_config == null)
             {
-                _body.Add(new Label("Select a LocalizationSettings asset above.") { style = { marginTop = 16 } });
+                _body.Add(new Label("Select a LocalizationConfig asset above.") { style = { marginTop = 16 } });
                 return;
             }
 
@@ -117,7 +117,7 @@ namespace TRnK.Localization
             var report = new Report();
 
             var localeCodes = new List<string>();
-            foreach (var l in _settings.Locales)
+            foreach (var l in _config.Locales)
                 if (!string.IsNullOrEmpty(l.Code)) localeCodes.Add(l.Code);
 
             var filledPerLocale = new Dictionary<string, int>();
@@ -126,7 +126,7 @@ namespace TRnK.Localization
             int totalEntries = 0;
             var seenKeysPerTable = new Dictionary<string, HashSet<string>>();
 
-            foreach (var table in _settings.Tables)
+            foreach (var table in _config.Tables)
             {
                 if (string.IsNullOrWhiteSpace(table.Name))
                     report.Issues.Add("A table has an empty name.");

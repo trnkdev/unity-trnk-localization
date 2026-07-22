@@ -5,28 +5,28 @@ namespace TRnK.Localization
 {
     internal static class LocalizationService
     {
-        internal static bool IsInitialized => s_settings != null;
+        internal static bool IsInitialized => s_config != null;
         internal static string CurrentLocale { get; private set; }
-        internal static LocalizationSettings Settings => s_settings;
+        internal static LocalizationConfig Config => s_config;
 
         internal static event Action<string> LocaleChanged;
 
-        private static LocalizationSettings s_settings;
+        private static LocalizationConfig s_config;
 
-        internal static void Initialize(LocalizationSettings settings)
+        internal static void Initialize(LocalizationConfig config)
         {
-            if (settings == null)
+            if (config == null)
             {
-                Log.Error("Cannot initialize TRnK.Localization: settings asset is null.");
+                Log.Error("Cannot initialize TRnK.Localization: config asset is null.");
                 return;
             }
 
             // Idempotent — re-initializing with the same asset is a no-op
-            if (s_settings == settings) return;
+            if (s_config == config) return;
 
-            s_settings = settings;
-            CurrentLocale = settings.DefaultLocale;
-            Log.Info($"TRnK.Localization initialized with '{settings.name}'. Default locale: '{CurrentLocale}'.");
+            s_config = config;
+            CurrentLocale = config.DefaultLocale;
+            Log.Info($"TRnK.Localization initialized with '{config.name}'. Default locale: '{CurrentLocale}'.");
         }
 
         internal static void SetLocale(string localeCode)
@@ -45,9 +45,9 @@ namespace TRnK.Localization
 
             if (string.Equals(CurrentLocale, localeCode, StringComparison.Ordinal)) return;
 
-            if (!s_settings.HasLocale(localeCode))
+            if (!s_config.HasLocale(localeCode))
             {
-                Log.Warn($"Locale '{localeCode}' is not registered in LocalizationSettings. Ignoring.");
+                Log.Warn($"Locale '{localeCode}' is not registered in LocalizationConfig. Ignoring.");
                 return;
             }
 
@@ -66,21 +66,21 @@ namespace TRnK.Localization
             if (string.IsNullOrEmpty(tableName) || string.IsNullOrEmpty(key))
                 return MissingKey(tableName, key);
 
-            if (!s_settings.TableExists(tableName))
+            if (!s_config.TableExists(tableName))
             {
-                Log.Warn($"Table '{tableName}' does not exist in LocalizationSettings.");
+                Log.Warn($"Table '{tableName}' does not exist in LocalizationConfig.");
                 return MissingKey(tableName, key);
             }
 
             // 1. Current locale (treats empty value as missing)
-            if (s_settings.TryGet(tableName, key, CurrentLocale, out string value)
+            if (s_config.TryGet(tableName, key, CurrentLocale, out string value)
                 && !string.IsNullOrEmpty(value))
                 return value;
 
             // 2. Default locale fallback (only if different)
-            var defaultLocale = s_settings.DefaultLocale;
+            var defaultLocale = s_config.DefaultLocale;
             if (!string.Equals(CurrentLocale, defaultLocale, StringComparison.Ordinal)
-                && s_settings.TryGet(tableName, key, defaultLocale, out value)
+                && s_config.TryGet(tableName, key, defaultLocale, out value)
                 && !string.IsNullOrEmpty(value))
                 return value;
 
@@ -102,7 +102,7 @@ namespace TRnK.Localization
         [UnityEditor.InitializeOnEnterPlayMode]
         private static void ResetOnEnterPlayMode(UnityEditor.EnterPlayModeOptions _)
         {
-            s_settings = null;
+            s_config = null;
             CurrentLocale = null;
             LocaleChanged = null;
         }

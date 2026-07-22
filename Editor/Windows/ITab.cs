@@ -11,8 +11,8 @@ namespace TRnK.Localization
         /// <summary>Root visual element for this tab — built once, reused on tab switch.</summary>
         VisualElement Root { get; }
 
-        /// <summary>Called when the active settings asset changes (including null).</summary>
-        void OnSettingsChanged(LocalizationSettings settings);
+        /// <summary>Called when the active config asset changes (including null).</summary>
+        void OnConfigChanged(LocalizationConfig config);
 
         /// <summary>Called when the tab becomes the active one. Use to refresh stale data.</summary>
         void OnSelected();

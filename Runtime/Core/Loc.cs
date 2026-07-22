@@ -18,9 +18,9 @@ namespace TRnK.Localization
             remove => LocalizationService.LocaleChanged -= value;
         }
 
-        /// <summary>Initializes the localization service with a settings instance.</summary>
-        public static void Initialize(LocalizationSettings settings)
-            => LocalizationService.Initialize(settings);
+        /// <summary>Initializes the localization service with a config instance.</summary>
+        public static void Initialize(LocalizationConfig config)
+            => LocalizationService.Initialize(config);
 
         /// <summary>Switches the active locale. Fires <see cref="LocaleChanged"/> if the locale changes.</summary>
         public static void SetLocale(string localeCode)

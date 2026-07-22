@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace TRnK.Localization
 {
-    /// <summary>Converts raw parsed CSV grids into structured data and diffs them against a <see cref="LocalizationSettings"/> asset.</summary>
+    /// <summary>Converts raw parsed CSV grids into structured data and diffs them against a <see cref="LocalizationConfig"/> asset.</summary>
     internal static class CsvDiff
     {
         /// <summary>Result of converting a parsed CSV grid into structured form.</summary>
@@ -114,15 +114,15 @@ namespace TRnK.Localization
             return result;
         }
 
-        /// <summary>Computes a diff between parsed CSV data and the current settings asset.</summary>
-        internal static DiffResult Compute(LocalizationSettings settings, ParsedCsv csv)
+        /// <summary>Computes a diff between parsed CSV data and the current config asset.</summary>
+        internal static DiffResult Compute(LocalizationConfig config, ParsedCsv csv)
         {
             var result = new DiffResult();
-            if (settings == null || csv == null) return result;
+            if (config == null || csv == null) return result;
 
             // Locale validation
             var settingsLocales = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var locale in settings.Locales)
+            foreach (var locale in config.Locales)
                 if (!string.IsNullOrEmpty(locale.Code)) settingsLocales.Add(locale.Code);
 
             var csvLocales = new HashSet<string>(csv.LocaleCodes, StringComparer.Ordinal);
@@ -137,7 +137,7 @@ namespace TRnK.Localization
 
             // Build current state lookup: tableName -> key -> locale -> value
             var current = new Dictionary<string, Dictionary<string, Dictionary<string, string>>>(StringComparer.Ordinal);
-            foreach (var table in settings.Tables)
+            foreach (var table in config.Tables)
             {
                 if (string.IsNullOrEmpty(table.Name)) continue;
                 var tableDict = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);

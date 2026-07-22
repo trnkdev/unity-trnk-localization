@@ -10,7 +10,7 @@ namespace TRnK.Localization
         public string Title => "Locales";
         public VisualElement Root { get; }
 
-        private LocalizationSettings _settings;
+        private LocalizationConfig _config;
         private SerializedObject _so;
 
         private ListView _list;
@@ -30,10 +30,10 @@ namespace TRnK.Localization
             Root.Add(_body);
         }
 
-        public void OnSettingsChanged(LocalizationSettings settings)
+        public void OnConfigChanged(LocalizationConfig config)
         {
-            _settings = settings;
-            _so = settings != null ? new SerializedObject(settings) : null;
+            _config = config;
+            _so = config != null ? new SerializedObject(config) : null;
             Rebuild();
         }
 
@@ -47,9 +47,9 @@ namespace TRnK.Localization
         {
             _body.Clear();
 
-            if (_settings == null)
+            if (_config == null)
             {
-                var msg = new Label("Select a LocalizationSettings asset above.");
+                var msg = new Label("Select a LocalizationConfig asset above.");
                 msg.style.marginTop = 16;
                 _body.Add(msg);
                 return;
@@ -63,7 +63,7 @@ namespace TRnK.Localization
             RefreshDefaultChoices();
             _defaultDropdown.RegisterValueChangedCallback(evt =>
             {
-                Undo.RecordObject(_settings, "Change Default Locale");
+                Undo.RecordObject(_config, "Change Default Locale");
                 _so.Update();
                 _so.FindProperty("_defaultLocale").stringValue = evt.newValue;
                 _so.ApplyModifiedProperties();
@@ -109,17 +109,17 @@ namespace TRnK.Localization
         private void RefreshIndices()
         {
             _indices.Clear();
-            for (int i = 0; i < _settings.Locales.Count; i++) _indices.Add(i);
+            for (int i = 0; i < _config.Locales.Count; i++) _indices.Add(i);
         }
 
         private void RefreshDefaultChoices()
         {
             var choices = new List<string>();
-            foreach (var l in _settings.Locales)
+            foreach (var l in _config.Locales)
                 if (!string.IsNullOrEmpty(l.Code)) choices.Add(l.Code);
 
             _defaultDropdown.choices = choices;
-            _defaultDropdown.SetValueWithoutNotify(_settings.DefaultLocale);
+            _defaultDropdown.SetValueWithoutNotify(_config.DefaultLocale);
         }
 
         private VisualElement MakeLocaleRow()
@@ -171,12 +171,12 @@ namespace TRnK.Localization
             var field = (TextField)evt.target;
             int index = (int)field.userData;
 
-            Undo.RecordObject(_settings, "Edit Locale Code");
+            Undo.RecordObject(_config, "Edit Locale Code");
             _so.Update();
             _so.FindProperty("_locales").GetArrayElementAtIndex(index)
                 .FindPropertyRelative("Code").stringValue = evt.newValue;
             _so.ApplyModifiedProperties();
-            _settings.InvalidateIndex();
+            _config.InvalidateIndex();
             RefreshDefaultChoices();
         }
 
@@ -185,7 +185,7 @@ namespace TRnK.Localization
             var field = (TextField)evt.target;
             int index = (int)field.userData;
 
-            Undo.RecordObject(_settings, "Edit Locale Name");
+            Undo.RecordObject(_config, "Edit Locale Name");
             _so.Update();
             _so.FindProperty("_locales").GetArrayElementAtIndex(index)
                 .FindPropertyRelative("Name").stringValue = evt.newValue;
@@ -194,7 +194,7 @@ namespace TRnK.Localization
 
         private void AddLocale()
         {
-            Undo.RecordObject(_settings, "Add Locale");
+            Undo.RecordObject(_config, "Add Locale");
             _so.Update();
             var localesProp = _so.FindProperty("_locales");
             int idx = localesProp.arraySize;
@@ -203,7 +203,7 @@ namespace TRnK.Localization
             elem.FindPropertyRelative("Code").stringValue = string.Empty;
             elem.FindPropertyRelative("Name").stringValue = string.Empty;
             _so.ApplyModifiedProperties();
-            _settings.InvalidateIndex();
+            _config.InvalidateIndex();
 
             RefreshIndices();
             _list.RefreshItems();
@@ -216,11 +216,11 @@ namespace TRnK.Localization
             if (row < 0 || row >= _indices.Count) return;
             int localeIndex = _indices[row];
 
-            Undo.RecordObject(_settings, "Remove Locale");
+            Undo.RecordObject(_config, "Remove Locale");
             _so.Update();
             _so.FindProperty("_locales").DeleteArrayElementAtIndex(localeIndex);
             _so.ApplyModifiedProperties();
-            _settings.InvalidateIndex();
+            _config.InvalidateIndex();
 
             RefreshIndices();
             _list.RefreshItems();
@@ -229,9 +229,9 @@ namespace TRnK.Localization
 
         private void SyncEntries()
         {
-            if (_settings == null) return;
-            _settings.SyncEntriesWithLocales();
-            AssetDatabase.SaveAssetIfDirty(_settings);
+            if (_config == null) return;
+            _config.SyncEntriesWithLocales();
+            AssetDatabase.SaveAssetIfDirty(_config);
             EditorUtility.DisplayDialog("Sync Complete",
                 "All entries now have value slots for every registered locale.", "OK");
         }
