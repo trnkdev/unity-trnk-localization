@@ -26,9 +26,7 @@ namespace TRnK.Localization
         {
             internal List<ChangeEntry> Added   = new();
             internal List<ChangeEntry> Updated = new();
-            internal List<ChangeEntry> Removed = new(); // Only meaningful in Replace mode
-            internal List<string>      LocalesNotInSettings = new();
-            internal List<string>      LocalesInSettingsNotInCsv = new();
+            internal List<ChangeEntry> Removed = new();
 
             internal int TotalChanges => Added.Count + Updated.Count + Removed.Count;
         }
@@ -42,99 +40,11 @@ namespace TRnK.Localization
             internal string NewValue;
         }
 
-        /// <summary>Converts a raw CSV grid into structured data. Expects header row <c>Table,Key,locale1,locale2,...</c>.</summary>
-        internal static ParsedCsv Structure(List<List<string>> rows)
-        {
-            var result = new ParsedCsv();
-            if (rows == null || rows.Count < 1) return result;
-
-            var header = rows[0];
-            if (header.Count < 3)
-            {
-                result.Warnings.Add("Header row must contain at least: Table, Key, and one locale column.");
-                return result;
-            }
-
-            // Validate header columns 0 and 1
-            if (!string.Equals(header[0]?.Trim(), "Table", StringComparison.OrdinalIgnoreCase))
-                result.Warnings.Add($"Expected first column to be 'Table', got '{header[0]}'.");
-            if (!string.Equals(header[1]?.Trim(), "Key", StringComparison.OrdinalIgnoreCase))
-                result.Warnings.Add($"Expected second column to be 'Key', got '{header[1]}'.");
-
-            // Locale codes from columns 2..n
-            for (int c = 2; c < header.Count; c++)
-            {
-                var code = header[c]?.Trim();
-                if (!string.IsNullOrEmpty(code)) result.LocaleCodes.Add(code);
-            }
-
-            // Data rows
-            for (int r = 1; r < rows.Count; r++)
-            {
-                var row = rows[r];
-                if (row.Count < 2 || (string.IsNullOrEmpty(row[0]) && string.IsNullOrEmpty(row[1])))
-                    continue; // Skip blank rows
-
-                var table = row[0]?.Trim();
-                var key   = row[1]?.Trim();
-
-                if (string.IsNullOrEmpty(table))
-                {
-                    result.Warnings.Add($"Row {r + 1}: empty Table column, skipped.");
-                    continue;
-                }
-
-                if (string.IsNullOrEmpty(key))
-                {
-                    result.Warnings.Add($"Row {r + 1}: empty Key column, skipped.");
-                    continue;
-                }
-
-                if (!result.Data.TryGetValue(table, out var tableDict))
-                {
-                    tableDict = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
-                    result.Data[table] = tableDict;
-                }
-
-                if (tableDict.ContainsKey(key))
-                {
-                    result.Warnings.Add($"Row {r + 1}: duplicate key '{key}' in table '{table}', last occurrence wins.");
-                }
-
-                var keyDict = new Dictionary<string, string>(StringComparer.Ordinal);
-                for (int c = 0; c < result.LocaleCodes.Count; c++)
-                {
-                    int colIndex = c + 2; // First two columns are Table and Key
-                    string value = colIndex < row.Count ? row[colIndex] : string.Empty;
-                    keyDict[result.LocaleCodes[c]] = value ?? string.Empty;
-                }
-
-                tableDict[key] = keyDict;
-            }
-
-            return result;
-        }
-
         /// <summary>Computes a diff between parsed CSV data and the current config asset.</summary>
         internal static DiffResult Compute(LocalizationConfig config, ParsedCsv csv)
         {
             var result = new DiffResult();
             if (config == null || csv == null) return result;
-
-            // Locale validation
-            var settingsLocales = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var locale in config.Locales)
-                if (!string.IsNullOrEmpty(locale.Code)) settingsLocales.Add(locale.Code);
-
-            var csvLocales = new HashSet<string>(csv.LocaleCodes, StringComparer.Ordinal);
-
-            foreach (var code in csvLocales)
-                if (!settingsLocales.Contains(code))
-                    result.LocalesNotInSettings.Add(code);
-
-            foreach (var code in settingsLocales)
-                if (!csvLocales.Contains(code))
-                    result.LocalesInSettingsNotInCsv.Add(code);
 
             // Build current state lookup: tableName -> key -> locale -> value
             var current = new Dictionary<string, Dictionary<string, Dictionary<string, string>>>(StringComparer.Ordinal);
@@ -168,9 +78,6 @@ namespace TRnK.Localization
 
                     foreach (var (locale, newValue) in csvKey)
                     {
-                        // Skip locales not in settings — they're not applicable
-                        if (!settingsLocales.Contains(locale)) continue;
-
                         string oldValue = null;
                         bool hadValue = currentKey != null && currentKey.TryGetValue(locale, out oldValue);
 
@@ -199,7 +106,7 @@ namespace TRnK.Localization
                     {
                         foreach (var (locale, value) in currentKey)
                         {
-                            if (settingsLocales.Contains(locale) && !string.IsNullOrEmpty(value))
+                            if (!string.IsNullOrEmpty(value))
                                 result.Removed.Add(Make(tableName, key, locale, value, null));
                         }
                     }

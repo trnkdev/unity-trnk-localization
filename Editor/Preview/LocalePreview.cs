@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace TRnK.Localization
 {
-    /// <summary>Edit-Mode locale preview: overrides lookups and refreshes every LocalizedText in open scenes and the prefab stage.</summary>
+    /// <summary>Switches the previewed locale: overrides lookups in Edit Mode, or the live locale while playing.</summary>
     internal static class LocalePreview
     {
         /// <summary>The locale code being previewed, or null when preview is off.</summary>
@@ -14,10 +14,17 @@ namespace TRnK.Localization
         internal static void Apply(LocalizationConfig config, string localeCode)
         {
             if (config == null || string.IsNullOrEmpty(localeCode)) return;
-            if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+
+            ActiveLocale = localeCode;
+
+            // In Play Mode the running game owns the locale — switch it for real
+            if (EditorApplication.isPlaying)
+            {
+                Loc.SetLocale(localeCode);
+                return;
+            }
 
             LocalizationService.SetEditorPreview(config, localeCode);
-            ActiveLocale = localeCode;
             RefreshAll();
         }
 

@@ -18,14 +18,8 @@ namespace TRnK.Localization
 #endif
         [SerializeField] private List<TableEntry> _entries = new();
 
-        public string Name
-        {
-            get => _name;
-            internal set => _name = value;
-        }
+        public string Name => _name;
 
         public IReadOnlyList<TableEntry> Entries => _entries;
-
-        internal List<TableEntry> EditEntries => _entries;
     }
 }

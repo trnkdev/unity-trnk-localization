@@ -10,14 +10,8 @@ namespace TRnK.Localization
         [SerializeField] private string _key;
         [SerializeField] private List<LocaleValue> _values = new();
 
-        public string Key
-        {
-            get => _key;
-            internal set => _key = value;
-        }
+        public string Key => _key;
 
         public IReadOnlyList<LocaleValue> Values => _values;
-
-        internal List<LocaleValue> EditValues => _values;
     }
 }

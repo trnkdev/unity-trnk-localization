@@ -137,36 +137,6 @@ namespace TRnK.Localization
                 Log.Warn($"DefaultLocale '{_defaultLocale}' is not in the Locales list on '{name}'.");
         }
 
-        /// <summary>Editor-only. Adds empty <see cref="LocaleValue"/> slots for any registered locale missing from an entry.</summary>
-        internal void SyncEntriesWithLocales()
-        {
-            foreach (var table in _tables)
-            {
-                foreach (var entry in table.EditEntries)
-                {
-                    foreach (var locale in _locales)
-                    {
-                        if (string.IsNullOrWhiteSpace(locale.Code)) continue;
-
-                        bool found = false;
-                        foreach (var lv in entry.Values)
-                        {
-                            if (string.Equals(lv.LocaleCode, locale.Code, StringComparison.Ordinal))
-                            {
-                                found = true;
-                                break;
-                            }
-                        }
-
-                        if (!found)
-                            entry.EditValues.Add(new LocaleValue { LocaleCode = locale.Code, Value = string.Empty });
-                    }
-                }
-            }
-
-            InvalidateIndex();
-            UnityEditor.EditorUtility.SetDirty(this);
-        }
 #endif
     }
 }

@@ -1,3 +1,29 @@
+## [0.4.0] - 2026-07-26
+
+### Single Source of Truth
+
+The spreadsheet is now the only place translations are authored. The config asset is a build artifact: synced from the sheet, never hand-edited.
+
+**Added**
+
+- **Google Sheets sync** — paste the spreadsheet URL once and list the tab names; each tab is fetched as CSV by name (`gviz` endpoint, no API key or OAuth) and becomes a table of the same name.
+- Non-blocking fetch via `EditorApplication.update` polling — the editor never freezes; 20s timeout and cancel through Unity's background `Progress` bar.
+- All-or-nothing sync: if any tab fails to fetch or parse, nothing reaches the preview — a partial fetch under Replace-All would read as "that table was deleted".
+- Named failures: tab not found, no network, empty response, and the not-link-shared case (Google returns an HTML login page instead of CSV).
+- Locales are defined by the spreadsheet header — sync registers them and sets the default locale when unset.
+- Play-Mode locale switching from the Preview dropdown (via `Loc.SetLocale`), in addition to Edit Mode.
+
+**Changed**
+
+- Window reduced to three tabs: **Sync**, **Tables** (read-only browser with search), **Validation** (now reporting spreadsheet defects to fix upstream).
+- Import is always Replace-All — with one writer there is nothing to reconcile.
+- Tab hint text and window styling share the `LocalizedText` inspector palette.
+
+**Removed**
+
+- Inline table/key editing, locale list editing, Merge-vs-Replace import modes, and manual CSV import — each was a second writer competing with the spreadsheet.
+- Export remains, for seeding a new spreadsheet or keeping a text backup.
+
 ## [0.3.0] - 2026-07-26
 
 ### Developer Workflow
@@ -18,9 +44,6 @@
 - Import/Export tab: CSV export (Excel-compatible, BOM); CSV import with diff preview, Merge/Replace modes, undo support.
 - Validation tab: per-locale coverage bars, missing translations, duplicate keys, empty names.
 - Robust CSV pipeline: BOM, quoted/multi-line fields, escaped quotes, comma/semicolon auto-detection.
-
-## [0.1.0] - 2026-07-22
-
 
 ## [0.1.0] - 2026-07-22
 

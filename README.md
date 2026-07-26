@@ -189,13 +189,50 @@ Locales in the CSV that aren't registered in settings are skipped with a notice.
 - Live key validation in every `LocalizedString` inspector: green = key exists, red = missing (Odin's own palette when Odin is installed); editing to a valid key auto-refreshes the `LocalizedText`'s TMP text
 - Editor settings stored as a project asset (`Assets/Plugins/TRnK/Localization/Editor/`) — no machine-global `EditorPrefs`
 
-### v0.4 — Google Sheets Sync + Polish (planned)
-- Sync button in the Import/Export tab: fetches sheet tabs as CSV over HTTPS and pipes them through the existing parse → diff preview → undoable apply — straight into the config asset, no intermediate file in the project
-- Robust editor networking: timeout, cancel button, progress bar, offline/HTTP error handling — a failed or partial fetch can never touch the config asset
-- `LocalizedTMPFont` component: per-locale font swap via direct references (no Addressables — right-sized for indie scope)
-- Editor UX refinement based on real usage
+### v0.4 — Single Source of Truth (planned)
 
-### v0.5 — Production Polish (planned)
+**The spreadsheet becomes the only place translations are authored.** The config
+asset is a build artifact: synced from the sheet, never hand-edited. No merge
+modes, no reconciliation — the sheet always wins because nothing else writes.
+
+The window drops to three tabs:
+
+| Tab | Purpose | Editable |
+|---|---|---|
+| **Sync** | Sheet list + Sync; Export (seeds a new sheet / text backup) | sheet list only |
+| **Tables** | Browse tables, keys and translations, with search | read-only |
+| **Validation** | Coverage, missing values, duplicate keys — reported as *sheet* defects to fix upstream | read-only |
+
+**Setup:** paste the spreadsheet URL once, then list the tab names to sync —
+one tab per table, named as you want the table named:
+
+```
+Spreadsheet URL   https://docs.google.com/spreadsheets/d/<id>/edit
+Tabs              UI, Combat, Event
+```
+
+Each tab is fetched by name, no API key or OAuth:
+`https://docs.google.com/spreadsheets/d/<id>/gviz/tq?tqx=out:csv&sheet=<tab>`
+
+- Sync: fetch every listed tab as CSV over HTTPS → existing parse → existing diff preview → existing undoable apply. Always Replace-All; the download never writes anything, only **Apply** does
+- **All-or-nothing:** if any tab fails to fetch or parse, nothing reaches the preview — a partially-fetched sync under Replace-All would read as "that table was deleted"
+- Non-blocking fetch via `EditorApplication.update` polling — the editor never freezes; timeout plus cancel through Unity's background `Progress` API
+- Clear, named failures: tab not found, no network, sheet not link-shared (Google returns an HTML login page), empty response
+- Renaming a tab is a deliberate two-step: sync fails on the old name, you update the name in the list, and Replace-All carries the data to the new table
+- Removed: inline table/key editing, locale list editing, Merge-vs-Replace modes, manual CSV import — every one of them a second writer
+- Preview dropdown also switches locale in **Play Mode** (via `Loc.SetLocale`), not just Edit Mode
+
+**Requires** the spreadsheet shared as *Anyone with the link → Viewer*.
+
+### v0.5 — Rename Safety (planned)
+
+Renaming a spreadsheet tab renames its table. Code references break at compile
+time (good), but `LocalizedText` components store the table as a serialized
+string in scenes and prefabs — those go red in the inspector and must currently
+be fixed by hand.
+
+- Codegen table constants (`LocTable.CommonUI`) on sync — stale **code** references become compile errors naming every file and line
+- Rename detection in the sync diff preview: when the table set changes from `{UI, …}` to `{Common UI, …}`, offer a migration that rewrites the stored table string across all scenes and prefabs
 - Sample scenes and common patterns
 - Full API documentation
 
