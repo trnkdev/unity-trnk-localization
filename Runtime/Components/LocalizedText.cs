@@ -19,7 +19,7 @@ namespace TRnK.Localization
 #if ODIN_INSPECTOR
         [InlineProperty, HideLabel]
 #endif
-        [SerializeField] private LocalizedString _localized;
+        [SerializeField] private LocalizedString _localized = new();
 
         private TMP_Text _text;
 
@@ -40,5 +40,15 @@ namespace TRnK.Localization
         }
 
         private void OnLocaleChanged(string _) => Refresh();
+
+#if UNITY_EDITOR
+        /// <summary>Editor-only. Refreshes this text from the active Edit-Mode preview locale.</summary>
+        internal void RefreshEditorPreview()
+        {
+            // _text is unset in Edit Mode (Awake has not run)
+            if (!TryGetComponent<TMP_Text>(out var text)) return;
+            text.text = _localized.Get();
+        }
+#endif
     }
 }

@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using UnityEngine.UIElements;
 
 namespace TRnK.Localization
@@ -18,3 +19,4 @@ namespace TRnK.Localization
         void OnSelected();
     }
 }
+#endif

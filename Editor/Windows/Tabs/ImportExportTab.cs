@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System.Collections.Generic;
 using System.IO;
 using TRnK.Logger;
@@ -422,3 +423,4 @@ namespace TRnK.Localization
         }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -177,3 +178,4 @@ namespace TRnK.Localization
         }
     }
 }
+#endif

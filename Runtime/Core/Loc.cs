@@ -29,5 +29,9 @@ namespace TRnK.Localization
         /// <summary>Returns the translated string for a table/key pair, falling back to the default locale when missing.</summary>
         public static string Get(string tableName, string key)
             => LocalizationService.Get(tableName, key);
+
+        /// <summary>Returns the translated string with named {placeholder} tokens replaced by the given arguments.</summary>
+        public static string Get(string tableName, string key, params LocArg[] args)
+            => PlaceholderFormatter.Format(LocalizationService.Get(tableName, key), args);
     }
 }

@@ -1,4 +1,4 @@
-#if !ODIN_INSPECTOR
+#if UNITY_EDITOR && !ODIN_INSPECTOR
 using UnityEditor;
 using UnityEngine;
 
@@ -22,8 +22,22 @@ namespace TRnK.Localization
                 var tableRect = new Rect(row.x,              row.y, half, row.height);
                 var keyRect   = new Rect(row.x + half + Gap, row.y, half, row.height);
 
+                // Tinting is applied only where a validation verdict exists (LocalizedText's inspector)
+                bool tint = !tableProp.hasMultipleDifferentValues && !keyProp.hasMultipleDifferentValues
+                            && property.serializedObject.targetObject is not LocalizedText;
+
+                var prevColor = GUI.color;
+                if (tint)
+                {
+                    var result = LocalizedKeyValidator.Validate(tableProp.stringValue, keyProp.stringValue);
+                    if (result.IsValid) GUI.color = LocalizedKeyValidator.ValidColor;
+                    else if (result.State == LocalizedKeyState.Missing) GUI.color = LocalizedKeyValidator.ErrorColor;
+                }
+
                 EditorGUI.PropertyField(tableRect, tableProp, GUIContent.none);
                 EditorGUI.PropertyField(keyRect,   keyProp,   GUIContent.none);
+
+                GUI.color = prevColor;
             }
         }
 

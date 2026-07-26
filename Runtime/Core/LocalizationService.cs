@@ -57,41 +57,51 @@ namespace TRnK.Localization
 
         internal static string Get(string tableName, string key)
         {
+#if UNITY_EDITOR
+            // Edit-Mode preview: resolve against the preview config/locale without requiring Initialize
+            if (!UnityEngine.Application.isPlaying && s_previewConfig != null)
+                return GetFrom(s_previewConfig, s_previewLocale, tableName, key);
+#endif
             if (!IsInitialized)
             {
                 Log.Warn("TRnK.Localization is not initialized. Returning empty string.");
                 return string.Empty;
             }
 
-            if (string.IsNullOrEmpty(tableName) || string.IsNullOrEmpty(key))
-                return MissingKey(tableName, key);
+            return GetFrom(s_config, CurrentLocale, tableName, key);
+        }
 
-            if (!s_config.TableExists(tableName))
+        private static string GetFrom(LocalizationConfig config, string locale, string tableName, string key)
+        {
+            if (string.IsNullOrEmpty(tableName) || string.IsNullOrEmpty(key))
+                return MissingKey(tableName, key, locale);
+
+            if (!config.TableExists(tableName))
             {
                 Log.Warn($"Table '{tableName}' does not exist in LocalizationConfig.");
-                return MissingKey(tableName, key);
+                return MissingKey(tableName, key, locale);
             }
 
-            // 1. Current locale (treats empty value as missing)
-            if (s_config.TryGet(tableName, key, CurrentLocale, out string value)
+            // 1. Requested locale (treats empty value as missing)
+            if (config.TryGet(tableName, key, locale, out string value)
                 && !string.IsNullOrEmpty(value))
                 return value;
 
             // 2. Default locale fallback (only if different)
-            var defaultLocale = s_config.DefaultLocale;
-            if (!string.Equals(CurrentLocale, defaultLocale, StringComparison.Ordinal)
-                && s_config.TryGet(tableName, key, defaultLocale, out value)
+            var defaultLocale = config.DefaultLocale;
+            if (!string.Equals(locale, defaultLocale, StringComparison.Ordinal)
+                && config.TryGet(tableName, key, defaultLocale, out value)
                 && !string.IsNullOrEmpty(value))
                 return value;
 
-            return MissingKey(tableName, key);
+            return MissingKey(tableName, key, locale);
         }
 
-        private static string MissingKey(string tableName, string key)
+        private static string MissingKey(string tableName, string key, string locale)
         {
             var label = string.IsNullOrEmpty(tableName) ? key : $"{tableName}.{key}";
 #if UNITY_EDITOR
-            Log.Warn($"Missing localization key: '{label}' [locale: {CurrentLocale}].");
+            Log.Warn($"Missing localization key: '{label}' [locale: {locale}].");
             return $"#{label}";
 #else
             return string.Empty;
@@ -99,12 +109,30 @@ namespace TRnK.Localization
         }
 
 #if UNITY_EDITOR
+        // Edit-Mode preview override — set only by the editor assembly, inert while playing
+        private static LocalizationConfig s_previewConfig;
+        private static string s_previewLocale;
+
+        internal static void SetEditorPreview(LocalizationConfig config, string localeCode)
+        {
+            s_previewConfig = config;
+            s_previewLocale = localeCode;
+        }
+
+        internal static void ClearEditorPreview()
+        {
+            s_previewConfig = null;
+            s_previewLocale = null;
+        }
+
         [UnityEditor.InitializeOnEnterPlayMode]
         private static void ResetOnEnterPlayMode(UnityEditor.EnterPlayModeOptions _)
         {
             s_config = null;
             CurrentLocale = null;
             LocaleChanged = null;
+            s_previewConfig = null;
+            s_previewLocale = null;
         }
 #endif
     }

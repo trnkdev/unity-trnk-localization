@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System.Collections.Generic;
 using System.IO;
 using TRnK.Logger;
@@ -12,9 +13,10 @@ namespace TRnK.Localization
     {
         private const string MenuPath = "Tools/TRnK/Localization Manager";
         private const string TitleText = "TRnK Localization";
-        private const string LastAssetGuidPref = "TRnK.Localization.LastAssetGuid";
+        private const string PreviewOff = "Off";
 
         private ObjectField _configField;
+        private DropdownField _previewField;
         private Label _statusLabel;
         private VisualElement _content;
         private Dictionary<string, Button> _tabButtons;
@@ -58,6 +60,7 @@ namespace TRnK.Localization
             BindUI();
             InitTabs();
             RestoreLastSettings();
+            UpdatePreviewChoices();
         }
 
         private void BindUI()
@@ -72,6 +75,10 @@ namespace TRnK.Localization
             {
                 if (_config != null) EditorGUIUtility.PingObject(_config);
             };
+
+            _previewField = rootVisualElement.Q<DropdownField>("previewLocaleField");
+            _previewField.style.minWidth = 90;
+            _previewField.RegisterValueChangedCallback(evt => OnPreviewLocaleChanged(evt.newValue));
 
             _statusLabel = rootVisualElement.Q<Label>("statusLabel");
             _content = rootVisualElement.Q<VisualElement>("content");
@@ -131,37 +138,62 @@ namespace TRnK.Localization
 
         private void ApplyConfig(LocalizationConfig config)
         {
+            // Swapping the config while previewing would leave a stale override active
+            LocalePreview.Clear(_config);
+
             _config = config;
 
-            if (config != null)
-            {
-                var path = AssetDatabase.GetAssetPath(config);
-                var guid = AssetDatabase.AssetPathToGUID(path);
-                EditorPrefs.SetString(LastAssetGuidPref, guid);
-            }
-            else
-            {
-                EditorPrefs.DeleteKey(LastAssetGuidPref);
-            }
+            LocalizationEditorSettings.GetOrCreate().ActiveConfig = config;
 
             // Sync the field UI without re-firing the change callback
             if (_configField != null && _configField.value != config)
                 _configField.SetValueWithoutNotify(config);
 
             UpdateStatus();
+            UpdatePreviewChoices();
             BroadcastToTabs();
+        }
+
+        private void OnDisable()
+        {
+            // Closing the window (or a domain reload) always ends the preview
+            LocalePreview.Clear(_config);
+        }
+
+        private void UpdatePreviewChoices()
+        {
+            if (_previewField == null) return;
+
+            var choices = new List<string> { PreviewOff };
+            if (_config != null)
+            {
+                foreach (var locale in _config.Locales)
+                    if (!string.IsNullOrWhiteSpace(locale.Code))
+                        choices.Add(locale.Code);
+            }
+
+            _previewField.choices = choices;
+            _previewField.SetEnabled(_config != null);
+
+            var active = LocalePreview.ActiveLocale;
+            _previewField.SetValueWithoutNotify(
+                active != null && choices.Contains(active) ? active : PreviewOff);
+        }
+
+        private void OnPreviewLocaleChanged(string choice)
+        {
+            if (string.IsNullOrEmpty(choice) || string.Equals(choice, PreviewOff, System.StringComparison.Ordinal))
+                LocalePreview.Clear(_config);
+            else
+                LocalePreview.Apply(_config, choice);
         }
 
         private void RestoreLastSettings()
         {
-            var guid = EditorPrefs.GetString(LastAssetGuidPref, string.Empty);
-            if (string.IsNullOrEmpty(guid)) { UpdateStatus(); return; }
+            var config = LocalizationEditorSettings.GetOrCreate().ActiveConfig;
+            if (config == null) { UpdateStatus(); return; }
 
-            var path = AssetDatabase.GUIDToAssetPath(guid);
-            if (string.IsNullOrEmpty(path)) { UpdateStatus(); return; }
-
-            var asset = AssetDatabase.LoadAssetAtPath<LocalizationConfig>(path);
-            ApplyConfig(asset);
+            ApplyConfig(config);
         }
 
         private void BroadcastToTabs()
@@ -189,3 +221,4 @@ namespace TRnK.Localization
         }
     }
 }
+#endif

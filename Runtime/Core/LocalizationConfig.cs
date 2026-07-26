@@ -9,7 +9,7 @@ using Sirenix.OdinInspector;
 
 namespace TRnK.Localization
 {
-    [CreateAssetMenu(fileName = "LocalizationConfig", menuName = "TRnK/Localization/Config")]
+    [CreateAssetMenu(fileName = "LocalizationConfig", menuName = "TRnK/Localization/Localization Config")]
     public sealed class LocalizationConfig :
 #if ODIN_INSPECTOR
         SerializedScriptableObject
@@ -65,6 +65,12 @@ namespace TRnK.Localization
         {
             if (_index == null) BuildIndex();
             return _index.ContainsKey(tableName);
+        }
+
+        internal bool KeyExists(string tableName, string key)
+        {
+            if (_index == null) BuildIndex();
+            return _index.TryGetValue(tableName, out var tableIndex) && tableIndex.ContainsKey(key);
         }
 
         internal void InvalidateIndex() => _index = null;
