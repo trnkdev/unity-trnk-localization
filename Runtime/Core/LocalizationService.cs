@@ -24,9 +24,15 @@ namespace TRnK.Localization
             // Idempotent — re-initializing with the same asset is a no-op
             if (s_config == config) return;
 
+            string previousLocale = CurrentLocale;
+
             s_config = config;
             CurrentLocale = config.DefaultLocale;
             Log.Info($"TRnK.Localization initialized with '{config.name}'. Default locale: '{CurrentLocale}'.");
+
+            // Swapping configs can change the locale; listeners must refresh or they keep the old language
+            if (!string.Equals(previousLocale, CurrentLocale, StringComparison.Ordinal))
+                LocaleChanged?.Invoke(CurrentLocale);
         }
 
         internal static void SetLocale(string localeCode)

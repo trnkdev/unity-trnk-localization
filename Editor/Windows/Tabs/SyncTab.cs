@@ -15,7 +15,11 @@ namespace TRnK.Localization
             "Spreadsheet tab names, one per line. Each becomes a table of the same name.";
         private const string UrlPlaceholder =
             "https://docs.google.com/spreadsheets/d/…";
-        private const string TabsPlaceholder = "UI\nCombat\nItems";
+        private const string TabPlaceholder = "Sheet tab name";
+        private const float ActionButtonWidth = 90f;
+        private const float ActionButtonHeight = 22f;
+        private const float LabelMinWidth = 180f;
+        private const float LabelMaxWidth = 320f;
         private const string SheetHelp =
             "Each tab needs a 'Key' column followed by one column per locale code. " +
             "Share the spreadsheet as 'Anyone with the link → Viewer'.";
@@ -86,31 +90,68 @@ namespace TRnK.Localization
                 LocalizationEditorSettings.GetOrCreate().SpreadsheetUrl = evt.newValue);
             _body.Add(urlField);
 
-            var tabsField = new TextField("Tab Names")
-            {
-                multiline = true,
-                value = string.Join("\n", settings.TabNames),
-                tooltip = TabsTooltip
-            };
-            tabsField.textEdition.placeholder = TabsPlaceholder;
-            tabsField.textEdition.hidePlaceholderOnFocus = false;
-            tabsField.style.minHeight = 60;
-            tabsField.RegisterValueChangedCallback(evt =>
-                LocalizationEditorSettings.GetOrCreate().SetTabNames(SplitTabs(evt.newValue)));
-            _body.Add(tabsField);
+            _body.Add(BuildTabList(settings));
         }
 
-        private static List<string> SplitTabs(string raw)
+        private VisualElement BuildTabList(LocalizationEditorSettings settings)
         {
-            var names = new List<string>();
-            if (string.IsNullOrWhiteSpace(raw)) return names;
+            // Working copy — the ListView mutates this, and each change is persisted below
+            var names = new List<string>(settings.TabNames);
 
-            foreach (string line in raw.Split('\n'))
+            var list = new ListView(names)
             {
-                string name = line.Trim();
-                if (name.Length > 0) names.Add(name);
-            }
-            return names;
+                headerTitle = "Tab Names",
+                showFoldoutHeader = true,
+                showAddRemoveFooter = true,
+                showBoundCollectionSize = false,
+                reorderable = true,
+                reorderMode = ListViewReorderMode.Animated,
+                virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight,
+                tooltip = TabsTooltip,
+                makeItem = () => MakeTabRow(names),
+                bindItem = (element, index) => BindTabRow(element, index, names),
+            };
+
+            list.itemsAdded += _ => Persist(names);
+            list.itemsRemoved += _ => Persist(names);
+            list.itemIndexChanged += (_, _) => Persist(names);
+
+            list.style.marginTop = 4;
+            return list;
+        }
+
+        private static VisualElement MakeTabRow(List<string> names)
+        {
+            var field = new TextField { isDelayed = true };
+            field.textEdition.placeholder = TabPlaceholder;
+
+            // Rows are recycled, so the row's index is read at edit time, not captured at bind time
+            field.RegisterValueChangedCallback(evt =>
+            {
+                if (field.userData is not int index || index >= names.Count) return;
+
+                names[index] = evt.newValue?.Trim() ?? string.Empty;
+                Persist(names);
+            });
+
+            return field;
+        }
+
+        private static void BindTabRow(VisualElement element, int index, List<string> names)
+        {
+            var field = (TextField)element;
+            field.userData = index;
+            field.SetValueWithoutNotify(names[index] ?? string.Empty);
+        }
+
+        // Blank rows are dropped on save so an empty entry can never be fetched
+        private static void Persist(List<string> names)
+        {
+            var cleaned = new List<string>(names.Count);
+            foreach (string name in names)
+                if (!string.IsNullOrWhiteSpace(name)) cleaned.Add(name.Trim());
+
+            LocalizationEditorSettings.GetOrCreate().SetTabNames(cleaned);
         }
 
         // ---------------- Actions ----------------
@@ -165,48 +206,102 @@ namespace TRnK.Localization
 
         private void BuildPreviewSection()
         {
-            _body.Add(LocalizationStyles.Divider());
-            _body.Add(LocalizationStyles.Header("Preview"));
+            // Own container so the change list can claim the window's remaining height
+            var section = new VisualElement { style = { flexGrow = 1 } };
+            _body.Add(section);
+
+            section.Add(LocalizationStyles.Divider());
+            section.Add(LocalizationStyles.Header("Preview"));
 
             var summary = new Label(
                 $"+ {_pendingDiff.Added.Count} added   " +
                 $"~ {_pendingDiff.Updated.Count} updated   " +
                 $"- {_pendingDiff.Removed.Count} removed");
             summary.style.marginBottom = 4;
-            _body.Add(summary);
+            section.Add(summary);
 
             if (_pendingCsv.Warnings.Count > 0)
-                _body.Add(new HelpBox(string.Join("\n", _pendingCsv.Warnings), HelpBoxMessageType.Warning));
+                section.Add(new HelpBox(string.Join("\n", _pendingCsv.Warnings), HelpBoxMessageType.Warning));
 
-            var scroll = new ScrollView { style = { maxHeight = 200, marginTop = 4, marginBottom = 8 } };
+            // Grows into the window instead of scrolling inside a fixed box
+            var scroll = new ScrollView { style = { flexGrow = 1, minHeight = 120, marginTop = 4, marginBottom = 8 } };
             scroll.style.borderTopWidth = 1;
             scroll.style.borderBottomWidth = 1;
             scroll.style.borderTopColor = new Color(0, 0, 0, 0.2f);
             scroll.style.borderBottomColor = new Color(0, 0, 0, 0.2f);
 
+            int row = 0;
             foreach (var c in _pendingDiff.Added)
-                scroll.Add(ChangeRow($"+ {c.Table}.{c.Key} [{c.LocaleCode}]", c.NewValue, LocalizationStyles.Added));
+                scroll.Add(ChangeRow($"+ {c.Table}.{c.Key} [{c.LocaleCode}]", c.NewValue, LocalizationStyles.Added, row++));
             foreach (var c in _pendingDiff.Updated)
-                scroll.Add(ChangeRow($"~ {c.Table}.{c.Key} [{c.LocaleCode}]", $"{c.OldValue} → {c.NewValue}", LocalizationStyles.Updated));
+                scroll.Add(ChangeRow($"~ {c.Table}.{c.Key} [{c.LocaleCode}]", $"{c.OldValue} → {c.NewValue}", LocalizationStyles.Updated, row++));
             foreach (var c in _pendingDiff.Removed)
-                scroll.Add(ChangeRow($"- {c.Table}.{c.Key} [{c.LocaleCode}]", c.OldValue, LocalizationStyles.Removed));
+                scroll.Add(ChangeRow($"- {c.Table}.{c.Key} [{c.LocaleCode}]", c.OldValue, LocalizationStyles.Removed, row++));
 
-            _body.Add(scroll);
+            section.Add(scroll);
 
-            var actions = new VisualElement { style = { flexDirection = FlexDirection.Row } };
+            // Pinned below the list so it never scrolls out of reach, right-aligned
+            var actions = new VisualElement
+            {
+                style =
+                {
+                    flexDirection = FlexDirection.Row,
+                    justifyContent = Justify.FlexEnd,
+                    flexShrink = 0,
+                    marginTop = 4,
+                    marginBottom = 4,
+                }
+            };
+
             var applyBtn = new Button(ApplySync) { text = "Apply" };
             applyBtn.SetEnabled(_pendingDiff.TotalChanges > 0);
+            applyBtn.style.height = ActionButtonHeight;
+            applyBtn.style.width = ActionButtonWidth;
+
             var cancelBtn = new Button(CancelSync) { text = "Cancel" };
+            cancelBtn.style.height = ActionButtonHeight;
+            cancelBtn.style.width = ActionButtonWidth;
+            cancelBtn.style.marginLeft = 6;
+
             actions.Add(applyBtn);
             actions.Add(cancelBtn);
-            _body.Add(actions);
+            section.Add(actions);
         }
 
-        private static VisualElement ChangeRow(string label, string detail, Color color)
+        private static VisualElement ChangeRow(string label, string detail, Color color, int index)
         {
             var row = new VisualElement { style = { flexDirection = FlexDirection.Row, paddingLeft = 4, paddingTop = 1, paddingBottom = 1 } };
-            row.Add(new Label(label) { style = { width = 220, color = color } });
-            row.Add(new Label(detail) { style = { flexGrow = 1, whiteSpace = WhiteSpace.NoWrap, overflow = Overflow.Hidden } });
+
+            // Zebra striping keeps long change lists scannable
+            if ((index & 1) == 1)
+                row.style.backgroundColor = LocalizationStyles.RowStripe;
+
+            // Identifier column sizes to its content up to a cap; the value takes the rest of the row
+            row.Add(new Label(label)
+            {
+                style =
+                {
+                    minWidth = LabelMinWidth,
+                    maxWidth = LabelMaxWidth,
+                    flexShrink = 0,
+                    marginRight = 8,
+                    color = color,
+                    whiteSpace = WhiteSpace.NoWrap,
+                    overflow = Overflow.Hidden,
+                }
+            });
+
+            row.Add(new Label(detail)
+            {
+                style =
+                {
+                    flexGrow = 1,
+                    flexShrink = 1,
+                    whiteSpace = WhiteSpace.NoWrap,
+                    overflow = Overflow.Hidden,
+                }
+            });
+
             return row;
         }
 

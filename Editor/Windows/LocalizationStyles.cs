@@ -16,13 +16,14 @@ namespace TRnK.Localization
         internal static readonly Color Updated = Warning;
         internal static readonly Color Removed = Error;
 
-        /// <summary>Muted secondary text, matching Unity's own hint styling.</summary>
-        internal static Label Hint(string text)
-        {
-            var label = new Label(text);
-            label.AddToClassList("hint-text");
-            return label;
-        }
+        /// <summary>Alternating row tint — subtle enough to read as texture, not as a highlight.</summary>
+        internal static readonly Color RowStripe = new(1f, 1f, 1f, 0.03f);
+
+        /// <summary>Vertical rule between grid columns.</summary>
+        internal static readonly Color ColumnDivider = new(0f, 0f, 0f, 0.25f);
+
+        /// <summary>Identifier text — brighter than values so the key column anchors each row.</summary>
+        internal static readonly Color KeyText = new(0.85f, 0.87f, 0.92f);
 
         internal static Label Header(string text)
         {
