@@ -58,9 +58,9 @@ namespace TRnK.Localization
         internal static string Get(string tableName, string key)
         {
 #if UNITY_EDITOR
-            // Edit-Mode preview: resolve against the preview config/locale without requiring Initialize
-            if (!UnityEngine.Application.isPlaying && s_previewConfig != null)
-                return GetFrom(s_previewConfig, s_previewLocale, tableName, key);
+            // Editor tooling resolves against a config directly, without requiring Initialize
+            if (!UnityEngine.Application.isPlaying && s_editorConfig != null)
+                return GetFrom(s_editorConfig, s_editorLocale, tableName, key);
 #endif
             if (!IsInitialized)
             {
@@ -109,20 +109,20 @@ namespace TRnK.Localization
         }
 
 #if UNITY_EDITOR
-        // Edit-Mode preview override — set only by the editor assembly, inert while playing
-        private static LocalizationConfig s_previewConfig;
-        private static string s_previewLocale;
+        // Editor-tooling lookup override — set only by the editor assembly, inert while playing
+        private static LocalizationConfig s_editorConfig;
+        private static string s_editorLocale;
 
-        internal static void SetEditorPreview(LocalizationConfig config, string localeCode)
+        internal static void SetEditorLookup(LocalizationConfig config, string localeCode)
         {
-            s_previewConfig = config;
-            s_previewLocale = localeCode;
+            s_editorConfig = config;
+            s_editorLocale = localeCode;
         }
 
-        internal static void ClearEditorPreview()
+        internal static void ClearEditorLookup()
         {
-            s_previewConfig = null;
-            s_previewLocale = null;
+            s_editorConfig = null;
+            s_editorLocale = null;
         }
 
         [UnityEditor.InitializeOnEnterPlayMode]
@@ -131,8 +131,8 @@ namespace TRnK.Localization
             s_config = null;
             CurrentLocale = null;
             LocaleChanged = null;
-            s_previewConfig = null;
-            s_previewLocale = null;
+            s_editorConfig = null;
+            s_editorLocale = null;
         }
 #endif
     }

@@ -1,6 +1,6 @@
 {
   "name": "com.trnkdev.unitylocalization",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "displayName": "TRnK Localization",
   "description": "A lightweight, synchronous text-first localization package for Unity.",
   "unity": "6000.0",

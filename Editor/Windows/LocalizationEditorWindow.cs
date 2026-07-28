@@ -13,10 +13,8 @@ namespace TRnK.Localization
     {
         private const string MenuPath = "Tools/TRnK/Localization Manager";
         private const string TitleText = "TRnK Localization";
-        private const string PreviewOff = "Off";
 
         private ObjectField _configField;
-        private DropdownField _previewField;
         private Label _statusLabel;
         private VisualElement _content;
         private Dictionary<string, Button> _tabButtons;
@@ -60,7 +58,6 @@ namespace TRnK.Localization
             BindUI();
             InitTabs();
             RestoreLastSettings();
-            UpdatePreviewChoices();
         }
 
         private void BindUI()
@@ -75,10 +72,6 @@ namespace TRnK.Localization
             {
                 if (_config != null) EditorGUIUtility.PingObject(_config);
             };
-
-            _previewField = rootVisualElement.Q<DropdownField>("previewLocaleField");
-            _previewField.style.minWidth = 90;
-            _previewField.RegisterValueChangedCallback(evt => OnPreviewLocaleChanged(evt.newValue));
 
             _statusLabel = rootVisualElement.Q<Label>("statusLabel");
             _content = rootVisualElement.Q<VisualElement>("content");
@@ -136,9 +129,6 @@ namespace TRnK.Localization
 
         private void ApplyConfig(LocalizationConfig config)
         {
-            // Swapping the config while previewing would leave a stale override active
-            LocalePreview.Clear(_config);
-
             _config = config;
 
             LocalizationEditorSettings.GetOrCreate().ActiveConfig = config;
@@ -148,42 +138,7 @@ namespace TRnK.Localization
                 _configField.SetValueWithoutNotify(config);
 
             UpdateStatus();
-            UpdatePreviewChoices();
             BroadcastToTabs();
-        }
-
-        private void OnDisable()
-        {
-            // Closing the window (or a domain reload) always ends the preview
-            LocalePreview.Clear(_config);
-        }
-
-        private void UpdatePreviewChoices()
-        {
-            if (_previewField == null) return;
-
-            var choices = new List<string> { PreviewOff };
-            if (_config != null)
-            {
-                foreach (var locale in _config.Locales)
-                    if (!string.IsNullOrWhiteSpace(locale.Code))
-                        choices.Add(locale.Code);
-            }
-
-            _previewField.choices = choices;
-            _previewField.SetEnabled(_config != null);
-
-            var active = LocalePreview.ActiveLocale;
-            _previewField.SetValueWithoutNotify(
-                active != null && choices.Contains(active) ? active : PreviewOff);
-        }
-
-        private void OnPreviewLocaleChanged(string choice)
-        {
-            if (string.IsNullOrEmpty(choice) || string.Equals(choice, PreviewOff, System.StringComparison.Ordinal))
-                LocalePreview.Clear(_config);
-            else
-                LocalePreview.Apply(_config, choice);
         }
 
         private void RestoreLastSettings()

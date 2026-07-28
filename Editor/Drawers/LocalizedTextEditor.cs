@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using System.Globalization;
 using UnityEditor;
 using UnityEngine;
 
@@ -15,9 +16,12 @@ namespace TRnK.Localization
         private const float ValidateButtonWidth = 86f;
         private const string ValidateLabel = "Validate Key";
         private const string ValidateTooltip = "Check the Table and Key against the config selected in the Localization Manager.";
+        private const string LanguageLabel = "Selected Language";
+        private const string LanguageTooltip = "Language shown in the Scene view. Editor preview only — the game sets its own locale at runtime.";
 
         private SerializedProperty _tableProp;
         private SerializedProperty _keyProp;
+        private SerializedProperty _previewProp;
 
         private LocalizedKeyResult _result;
 
@@ -26,6 +30,7 @@ namespace TRnK.Localization
             var localizedProp = serializedObject.FindProperty("_localized");
             _tableProp = localizedProp.FindPropertyRelative("_table");
             _keyProp = localizedProp.FindPropertyRelative("_key");
+            _previewProp = serializedObject.FindProperty("_previewLocale");
 
             // Show the current state on selection rather than an empty box
             RunValidation();
@@ -36,6 +41,7 @@ namespace TRnK.Localization
             serializedObject.Update();
 
             DrawScriptField();
+            DrawLanguageSelector();
             EditorGUILayout.Space(2f);
 
             EditorGUI.BeginChangeCheck();
@@ -55,6 +61,43 @@ namespace TRnK.Localization
         {
             using (new EditorGUI.DisabledScope(true))
                 EditorGUILayout.PropertyField(serializedObject.FindProperty("m_Script"));
+        }
+
+        private void DrawLanguageSelector()
+        {
+            if (_previewProp == null) return;
+
+            var config = LocalizationEditorSettings.GetOrCreate().ActiveConfig;
+            if (config == null || config.Locales.Count == 0) return;
+
+            var labels = new GUIContent[config.Locales.Count];
+            int current = -1;
+
+            for (int i = 0; i < config.Locales.Count; i++)
+            {
+                var locale = config.Locales[i];
+                labels[i] = new GUIContent($"[{locale.Code}] {LocaleDisplayName(locale)}");
+
+                if (locale.Code == _previewProp.stringValue) current = i;
+            }
+
+            // Unset, or a locale the sheet no longer has — fall back to the default locale
+            if (current < 0)
+            {
+                current = DefaultLocaleIndex(config);
+                _previewProp.stringValue = config.Locales[current].Code;
+                serializedObject.ApplyModifiedProperties();
+            }
+
+            EditorGUI.BeginChangeCheck();
+            int selected = EditorGUILayout.Popup(
+                new GUIContent(LanguageLabel, LanguageTooltip), current, labels);
+
+            if (!EditorGUI.EndChangeCheck()) return;
+
+            _previewProp.stringValue = config.Locales[selected].Code;
+            serializedObject.ApplyModifiedProperties();
+            RefreshPreview();
         }
 
         private void DrawFields()
@@ -126,9 +169,15 @@ namespace TRnK.Localization
             RunValidation();
 
             if (_result.IsValid)
-                LocalizedKeyValidator.RefreshText(target as LocalizedText);
+                RefreshPreview();
 
             Repaint();
+        }
+
+        private void RefreshPreview()
+        {
+            if (serializedObject.isEditingMultipleObjects) return;
+            LocalizedKeyValidator.RefreshText(target as LocalizedText, _previewProp?.stringValue);
         }
 
         private void RunValidation()
@@ -140,6 +189,29 @@ namespace TRnK.Localization
             }
 
             _result = LocalizedKeyValidator.Validate(_tableProp.stringValue, _keyProp.stringValue);
+        }
+
+        private static int DefaultLocaleIndex(LocalizationConfig config)
+        {
+            for (int i = 0; i < config.Locales.Count; i++)
+                if (config.Locales[i].Code == config.DefaultLocale) return i;
+            return 0;
+        }
+
+        // Prefers the authored name, then the culture's English name, then the raw code
+        private static string LocaleDisplayName(Locale locale)
+        {
+            if (!string.IsNullOrEmpty(locale.Name) && locale.Name != locale.Code)
+                return locale.Name;
+
+            try
+            {
+                return CultureInfo.GetCultureInfo(locale.Code).EnglishName;
+            }
+            catch (CultureNotFoundException)
+            {
+                return locale.Code;
+            }
         }
 
         // EditorGUILayout rects stop at the content edge; widen them to cover the row's padding

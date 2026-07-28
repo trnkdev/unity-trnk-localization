@@ -24,11 +24,19 @@ https://github.com/trnkdev/unity-trnk-localization.git
 
 `Assets > Create > TRnK > Localization > Config` — place it anywhere inside a `Resources` folder (e.g. `Assets/Resources/LocalizationConfig.asset`).
 
-**2. Author your data**
+**2. Author your data in Google Sheets**
 
-Open `Tools > TRnK > Localization Manager`:
-- **Locales tab** — register your languages (`en`, `vi`, `ja`, …) and pick the default
-- **Tables tab** — add tables (e.g. `UI`), add keys, type translations in the spreadsheet grid
+One spreadsheet, one tab per table. Each tab has a `Key` column followed by
+one column per locale code:
+
+| Key | en | vi | ja |
+|---|---|---|---|
+| `play_button` | Play | Chơi | 再生 |
+| `quit_button` | Quit | Thoát | 終了 |
+
+Share it as *Anyone with the link → Viewer*, then open
+`Tools > TRnK > Localization Manager` → **Sync** tab, paste the spreadsheet
+URL, list your tab names, and hit **Sync from Spreadsheet**.
 
 **3. Initialize from your game bootstrap**
 
@@ -112,57 +120,36 @@ public void SetLanguage(string code)
 
 **Named vs positional:** `Loc.Get` uses **named** placeholders (`{damage}`) and returns a string. The TMP `SetLocalizedText` overloads use TMP's **positional** placeholders (`{0}`, `{1:00}`) and write straight into TMP's buffer — same package, two syntaxes, because the zero-allocation path is TMP's formatter, not ours.
 
-**Locale preview:** the **Preview** dropdown in the Localization Manager's top bar refreshes every `LocalizedText` in open scenes and the prefab stage without entering Play Mode. Selecting **Off** (or closing the window, switching configs, or entering Play Mode) ends the preview; texts return to the default locale.
-
 **Key validation:** `LocalizedString` fields tint green when the (table, key) pair exists in the config selected in the Localization Manager, red when it doesn't (or is empty), and stay neutral when no config is selected. Green means the key *exists* — per-locale coverage lives in the Validation tab. Editing a `LocalizedText` to a valid key refreshes its TMP text immediately; invalid keys never touch the text.
 
-## CSV Workflow
+## Spreadsheet Workflow
 
-`Tools > TRnK > Localization Manager` → **Import / Export** tab.
+The spreadsheet is the single source of truth. The config asset is a build
+artifact: synced from the sheet, never hand-edited — so the Tables and
+Validation tabs are read-only.
 
-**Source of truth** — in the Localization Manager, each table is a
-spreadsheet: one row per key, one column per locale.
+**Sync tab**
 
-Table `UI`:
+| Field | Value |
+|---|---|
+| Spreadsheet URL | any URL of your spreadsheet |
+| Tab Names | one per line — `UI`, `Combat`, `Items` |
 
-| Key | en | vi | ja |
-|---|---|---|---|
-| `play_button` | Play | Chơi | 再生 |
-| `quit_button` | Quit | Thoát | 終了 |
+Each tab is fetched as CSV by name (no API key or OAuth) and becomes a table
+of the same name. Locale columns in the header define the config's locales.
 
-Table `Combat`:
+Sync is **Replace-All**: the config is rebuilt from the sheet, so anything
+removed there is removed here. The download itself writes nothing — the diff
+preview (added / updated / removed) shows what will change, and only **Apply**
+commits it, undoable with Ctrl+Z.
 
-| Key | en | vi | ja |
-|---|---|---|---|
-| `victory` | Victory! | Chiến thắng! | 勝利！ |
-| `defeat` | Defeat | Thất bại | 敗北 |
+If any tab fails to fetch or parse, nothing reaches the preview — a partial
+sync would otherwise read as "that table was deleted".
 
-Export/import flattens every table into a single exchange file, with the
-table name as the first column.
+**Export CSV** writes the current config to a file, for seeding a new
+spreadsheet or keeping a text backup.
 
-**Supported exchange formats:**
-
-**Local CSV** (currently the only format; Google Sheets sync is planned for v0.4):
-
-```
-Table,Key,en,vi,ja
-UI,play_button,Play,Chơi,再生
-UI,quit_button,Quit,Thoát,終了
-Combat,victory,Victory!,Chiến thắng!,勝利！
-Combat,defeat,Defeat,Thất bại,敗北
-```
-
-- First two columns are always `Table` and `Key`; remaining columns are locale codes
-- Semicolon-separated files (European/Vietnamese Excel exports) are auto-detected
-- Handles BOM, quoted fields, escaped quotes (`""`), multi-line values, mixed line endings
-
-**Import modes:**
-- **Merge — CSV Wins** (default): adds new keys, overwrites values present in the CSV, preserves everything else
-- **Replace All**: the CSV becomes the source of truth; keys not in the CSV are removed
-
-Every import shows a diff preview (added / updated / removed) before applying, and the apply is undoable (Ctrl+Z).
-
-Locales in the CSV that aren't registered in settings are skipped with a notice. Locales in settings missing from the CSV are preserved in Merge mode.
+Requires the spreadsheet shared as *Anyone with the link → Viewer*.
 
 ## Roadmap
 
@@ -185,11 +172,10 @@ Locales in the CSV that aren't registered in settings are skipped with a notice.
 ### v0.3 — Developer Workflow ✅ (code-complete; pending first Unity verification)
 - Smart strings: `Loc.Get("Combat", "deal_damage", ("damage", 42), ("enemy", "Goblin"))` with named placeholders
 - Zero-allocation hot path: `tmpText.SetLocalizedText(table, key, arg0…arg2)` via TMP's `SetText(format, args)` — for HP bars / score counters updating every frame (positional placeholders, up to 3 float args)
-- Edit-Mode locale preview: locale dropdown in the Localization Manager toolbar — refreshes every `LocalizedText` in open scenes and the prefab stage without entering Play Mode
 - Live key validation in every `LocalizedString` inspector: green = key exists, red = missing (Odin's own palette when Odin is installed); editing to a valid key auto-refreshes the `LocalizedText`'s TMP text
 - Editor settings stored as a project asset (`Assets/Plugins/TRnK/Localization/Editor/`) — no machine-global `EditorPrefs`
 
-### v0.4 — Single Source of Truth (planned)
+### v0.4 — Single Source of Truth ✅ (implemented; sync verified against a live spreadsheet)
 
 **The spreadsheet becomes the only place translations are authored.** The config
 asset is a build artifact: synced from the sheet, never hand-edited. No merge
@@ -219,12 +205,24 @@ Each tab is fetched by name, no API key or OAuth:
 - Non-blocking fetch via `EditorApplication.update` polling — the editor never freezes; timeout plus cancel through Unity's background `Progress` API
 - Clear, named failures: tab not found, no network, sheet not link-shared (Google returns an HTML login page), empty response
 - Renaming a tab is a deliberate two-step: sync fails on the old name, you update the name in the list, and Replace-All carries the data to the new table
+- Locale names come from `CultureInfo` (`en` → English), so only codes are authored in the sheet
+- **Selected Language** dropdown on each `LocalizedText` previews its own text in any locale, in Edit Mode — per component, editor-only
 - Removed: inline table/key editing, locale list editing, Merge-vs-Replace modes, manual CSV import — every one of them a second writer
-- Preview dropdown also switches locale in **Play Mode** (via `Loc.SetLocale`), not just Edit Mode
 
 **Requires** the spreadsheet shared as *Anyone with the link → Viewer*.
 
-### v0.5 — Rename Safety (planned)
+### v0.5 — Editor UX (planned)
+
+The window works but was assembled feature-by-feature. This pass is about
+information architecture, not decoration:
+
+- Every screen states its status and next action — last sync time, what changed, what to do next
+- Empty states that teach the setup order instead of saying "nothing here"
+- The read-only views earn their keep: filter by locale, show only missing values, click a key to copy it for a `LocalizedString`
+- Validation links each defect back to the tab it came from
+- One shared spacing/typography scale instead of per-file hand-styling
+
+### v0.6 — Rename Safety (planned)
 
 Renaming a spreadsheet tab renames its table. Code references break at compile
 time (good), but `LocalizedText` components store the table as a serialized
@@ -233,11 +231,11 @@ be fixed by hand.
 
 - Codegen table constants (`LocTable.CommonUI`) on sync — stale **code** references become compile errors naming every file and line
 - Rename detection in the sync diff preview: when the table set changes from `{UI, …}` to `{Common UI, …}`, offer a migration that rewrites the stored table string across all scenes and prefabs
-- Sample scenes and common patterns
-- Full API documentation
 
 ### v1.0 — Release (planned)
-- Codegen key constants (`Keys.UI.PlayButton`) — compile-time safety, build fails on missing keys
+- Codegen key constants (`Keys.UI.PlayButton`) — extends v0.6's table constants down to keys, so a missing key fails the build
+- Sample scenes and common patterns
+- Full API documentation
 
 ### Explicitly out of scope (by design)
 - Addressables for strings — strings are tiny; per-locale streaming adds complexity for negligible memory savings

@@ -10,18 +10,20 @@ The spreadsheet is now the only place translations are authored. The config asse
 - Non-blocking fetch via `EditorApplication.update` polling — the editor never freezes; 20s timeout and cancel through Unity's background `Progress` bar.
 - All-or-nothing sync: if any tab fails to fetch or parse, nothing reaches the preview — a partial fetch under Replace-All would read as "that table was deleted".
 - Named failures: tab not found, no network, empty response, and the not-link-shared case (Google returns an HTML login page instead of CSV).
-- Locales are defined by the spreadsheet header — sync registers them and sets the default locale when unset.
-- Play-Mode locale switching from the Preview dropdown (via `Loc.SetLocale`), in addition to Edit Mode.
+- Locales are defined by the spreadsheet header — sync registers them, names them from `CultureInfo` (`en` → English), and sets the default locale when unset.
+- **Per-component language preview** — a **Selected Language** dropdown on `LocalizedText` rewrites its TMP text in the chosen language, so each component previews independently in the Scene view. Editor-only; never read at runtime.
 
 **Changed**
 
 - Window reduced to three tabs: **Sync**, **Tables** (read-only browser with search), **Validation** (now reporting spreadsheet defects to fix upstream).
 - Import is always Replace-All — with one writer there is nothing to reconcile.
-- Tab hint text and window styling share the `LocalizedText` inspector palette.
+- Window styling shares the `LocalizedText` inspector palette; hints use Unity's own secondary-text styling.
+- `Validate Key` refreshes the TMP text in the component's selected language rather than always the default.
 
 **Removed**
 
 - Inline table/key editing, locale list editing, Merge-vs-Replace import modes, and manual CSV import — each was a second writer competing with the spreadsheet.
+- The global Edit-Mode preview dropdown from the Manager toolbar — replaced by the per-component selector above, which is scoped to what you are looking at and holds no global state.
 - Export remains, for seeding a new spreadsheet or keeping a text backup.
 
 ## [0.3.0] - 2026-07-26
@@ -30,7 +32,6 @@ The spreadsheet is now the only place translations are authored. The config asse
 
 - **Smart strings** — `Loc.Get("table", "key", ("name", value), ...)` with named placeholders `{name}`, supporting string/long/double/bool arguments; unknown placeholders stay literal (editor warns).
 - **Zero-allocation hot path** — `tmpText.SetLocalizedText(table, key, arg0…arg2)` using TMP's `SetText(format, args)` for per-frame counters (HP bars, scores) without GC allocation.
-- **Edit-Mode locale preview** — **Preview** dropdown in the Localization Manager toolbar; refreshes every `LocalizedText` in open scenes and prefab stage without entering Play Mode.
 - **Live key validation** — `LocalizedString` fields tint green (key exists) or red (missing) in the inspector; editing to a valid key auto-refreshes the `LocalizedText`'s TMP text. Odin's own palette when Odin is installed.
 - **Project-scoped editor settings** — Localization Manager remembers the active config and settings as a project asset, no machine-global `EditorPrefs`.
 

@@ -42,8 +42,11 @@ namespace TRnK.Localization
         private void OnLocaleChanged(string _) => Refresh();
 
 #if UNITY_EDITOR
-        /// <summary>Editor-only. Refreshes this text from the active Edit-Mode preview locale.</summary>
-        internal void RefreshEditorPreview()
+        // Preview language for this component only — never read at runtime.
+        [SerializeField, HideInInspector] private string _previewLocale;
+
+        /// <summary>Editor-only. Refreshes this text from the config, for inspector tooling.</summary>
+        internal void RefreshEditorText()
         {
             // _text is unset in Edit Mode (Awake has not run)
             if (!TryGetComponent<TMP_Text>(out var text)) return;

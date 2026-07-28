@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEditor;
 
 namespace TRnK.Localization
@@ -86,12 +87,27 @@ namespace TRnK.Localization
                 var element = localesProp.GetArrayElementAtIndex(index);
                 element.FindPropertyRelative("Code").stringValue = code;
                 element.FindPropertyRelative("Name").stringValue =
-                    existingNames.TryGetValue(code, out string name) && !string.IsNullOrEmpty(name) ? name : code;
+                    existingNames.TryGetValue(code, out string name) && !string.IsNullOrEmpty(name) && name != code
+                        ? name
+                        : DisplayNameFor(code);
             }
 
             var defaultProp = so.FindProperty("_defaultLocale");
             if (string.IsNullOrEmpty(defaultProp.stringValue) || !csv.LocaleCodes.Contains(defaultProp.stringValue))
                 defaultProp.stringValue = csv.LocaleCodes[0];
+        }
+
+        // "en" -> "English"; unknown codes keep the code itself
+        private static string DisplayNameFor(string code)
+        {
+            try
+            {
+                return CultureInfo.GetCultureInfo(code).EnglishName;
+            }
+            catch (CultureNotFoundException)
+            {
+                return code;
+            }
         }
     }
 }

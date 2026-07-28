@@ -64,23 +64,22 @@ namespace TRnK.Localization
             return new LocalizedKeyResult(LocalizedKeyState.Valid, $"'{table}/{key}' found in '{config.name}'.");
         }
 
-        /// <summary>Refreshes the component's TMP text from the config — used after a successful validation.</summary>
-        internal static void RefreshText(LocalizedText component)
+        /// <summary>Refreshes the component's TMP text in the given locale, or the config default when unset.</summary>
+        internal static void RefreshText(LocalizedText component, string localeCode = null)
         {
             if (component == null) return;
 
             var config = LocalizationEditorSettings.GetOrCreate().ActiveConfig;
             if (config == null) return;
 
-            bool previewActive = LocalePreview.ActiveLocale != null;
+            string locale = !string.IsNullOrEmpty(localeCode) && config.HasLocale(localeCode)
+                ? localeCode
+                : config.DefaultLocale;
 
-            if (!previewActive)
-                LocalizationService.SetEditorPreview(config, config.DefaultLocale);
-
-            component.RefreshEditorPreview();
-
-            if (!previewActive)
-                LocalizationService.ClearEditorPreview();
+            // Resolve against the config directly — Loc.Initialize has not run in Edit Mode
+            LocalizationService.SetEditorLookup(config, locale);
+            component.RefreshEditorText();
+            LocalizationService.ClearEditorLookup();
         }
     }
 }

@@ -6,8 +6,6 @@
             <ui:Label text="Settings:" class="top-bar__label" />
             <uie:ObjectField name="settingsField" allow-scene-objects="false" class="top-bar__field" />
             <ui:Button name="locateButton" text="Locate" tooltip="Ping the active settings asset in the Project window." class="top-bar__button" />
-            <ui:Label text="Preview:" class="top-bar__label" tooltip="Edit-Mode locale preview — refreshes every LocalizedText in open scenes and the prefab stage." />
-            <ui:DropdownField name="previewLocaleField" />
             <ui:VisualElement class="spacer" />
             <ui:Label name="statusLabel" class="top-bar__status" />
         </ui:VisualElement>
