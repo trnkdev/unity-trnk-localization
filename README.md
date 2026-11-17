@@ -153,7 +153,8 @@ Sync is **Replace-All**: every table is rewritten from the sheet, so anything
 removed there is removed here. Existing table assets are updated in place,
 wherever you moved them, so references to them survive. A tab that disappears
 from the sheet is dropped from the config, but its asset stays in the project
-(and is reused if the tab comes back). The download itself writes nothing — the diff
+(and is reused if the tab comes back). Tables listed by another config are never
+touched, so several configs can share tab names. The download itself writes nothing — the diff
 preview (added / updated / removed) shows what will change, and only **Apply**
 commits it, undoable with Ctrl+Z.
 

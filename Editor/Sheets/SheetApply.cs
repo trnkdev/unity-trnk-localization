@@ -93,7 +93,7 @@ namespace TRnK.Localization
             return table;
         }
 
-        // Config tables first, then any project asset, so a dropped table is reused, not duplicated
+        // Config tables first, then unlisted project assets, so a dropped table is reused, not duplicated
         private static Dictionary<string, LocalizationTable> FindTableAssets(LocalizationConfig config)
         {
             var byName = new Dictionary<string, LocalizationTable>(StringComparer.Ordinal);
@@ -102,10 +102,12 @@ namespace TRnK.Localization
                 if (table != null && !string.IsNullOrEmpty(table.TableName))
                     byName.TryAdd(table.TableName, table);
 
+            var otherConfigsTables = TablesListedByOtherConfigs(config);
+
             foreach (string guid in AssetDatabase.FindAssets($"t:{nameof(LocalizationTable)}"))
             {
                 var table = AssetDatabase.LoadAssetAtPath<LocalizationTable>(AssetDatabase.GUIDToAssetPath(guid));
-                if (table == null || string.IsNullOrEmpty(table.TableName)) continue;
+                if (table == null || string.IsNullOrEmpty(table.TableName) || otherConfigsTables.Contains(table)) continue;
 
                 if (byName.TryGetValue(table.TableName, out var kept) && kept != table)
                 {
@@ -117,6 +119,22 @@ namespace TRnK.Localization
             }
 
             return byName;
+        }
+
+        private static HashSet<LocalizationTable> TablesListedByOtherConfigs(LocalizationConfig config)
+        {
+            var tables = new HashSet<LocalizationTable>();
+
+            foreach (string guid in AssetDatabase.FindAssets($"t:{nameof(LocalizationConfig)}"))
+            {
+                var other = AssetDatabase.LoadAssetAtPath<LocalizationConfig>(AssetDatabase.GUIDToAssetPath(guid));
+                if (other == null || other == config) continue;
+
+                foreach (var table in other.Tables)
+                    if (table != null) tables.Add(table);
+            }
+
+            return tables;
         }
 
         private static string SafeFileName(string tableName)

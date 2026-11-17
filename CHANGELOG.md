@@ -1,3 +1,11 @@
+## [0.6.1] - 2026-11-17
+
+### Sync Isolation
+
+**Fixed**
+
+- Sync could overwrite a table asset listed by another config when both had a tab of the same name. It now skips tables other configs list, so several configs can share tab names.
+
 ## [0.6.0] - 2026-11-16
 
 ### Per-Table Storage
