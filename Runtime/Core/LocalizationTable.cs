@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace TRnK.Localization
 {
-    /// <summary>Translations of one spreadsheet tab, written by the sheet sync.</summary>
+    /// <summary>Translations of one spreadsheet tab, written by the spreadsheet import.</summary>
     public sealed class LocalizationTable : ScriptableObject
     {
         [SerializeField] private string _tableName;
@@ -55,7 +55,7 @@ namespace TRnK.Localization
 
             if (_values.Length != _keys.Length * _locales.Length)
             {
-                Log.Error($"Localization table '{_tableName}' is corrupted: {_values.Length} values for {_keys.Length} keys x {_locales.Length} locales. Re-sync it from the spreadsheet.");
+                Log.Error($"Localization table '{_tableName}' is corrupted: {_values.Length} values for {_keys.Length} keys x {_locales.Length} locales. Import the spreadsheet again.");
                 return index;
             }
 

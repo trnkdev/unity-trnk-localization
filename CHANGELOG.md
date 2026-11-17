@@ -1,3 +1,25 @@
+## [0.7.0] - 2026-11-17
+
+### Simple Importer
+
+The Localization Manager is cut down to what the workflow needs: import the spreadsheet, then view the tables.
+
+**Added**
+
+- **Import** tab: Spreadsheet URL, Tables Folder and Ignored Tabs (defaults to `Rule`), then one button. The whole spreadsheet downloads once as `.xlsx` and every tab that isn't ignored is imported; there is no tab list to maintain.
+- A tab whose first header isn't `Key` is skipped with a warning, so notes or rules tabs never become tables.
+- The Console lists created tables and tables dropped from the config.
+
+**Changed**
+
+- Reading `.xlsx` instead of per-tab CSV: cells with quotes or line breaks can no longer merge rows, and Japanese furigana is not glued onto the text.
+- Importing writes straight away. One Undo still reverts one import.
+
+**Removed**
+
+- Sync tab with its tab-name list, diff preview and Apply step.
+- Validation tab and CSV export.
+
 ## [0.6.1] - 2026-11-17
 
 ### Sync Isolation

@@ -10,6 +10,7 @@ namespace TRnK.Localization
     {
         private const string SettingsFolder = "Assets/Plugins/TRnK/Localization/Editor";
         private const string AssetPath = SettingsFolder + "/LocalizationEditorSettings.asset";
+        private const string DefaultIgnoredTab = "Rule";
 
         private static LocalizationEditorSettings s_instance;
         private static LocalizationEditorSettings s_transient;
@@ -18,7 +19,7 @@ namespace TRnK.Localization
 
         [SerializeField] private string _spreadsheetUrl;
 
-        [SerializeField] private List<string> _tabNames = new();
+        [SerializeField] private List<string> _ignoredTabs = new() { DefaultIgnoredTab };
 
         [SerializeField] private string _tablesFolder;
 
@@ -34,13 +35,13 @@ namespace TRnK.Localization
             }
         }
 
-        /// <summary>Spreadsheet tab names to sync; each becomes a table of the same name.</summary>
-        internal IReadOnlyList<string> TabNames => _tabNames;
+        /// <summary>Spreadsheet tabs the import skips.</summary>
+        internal IReadOnlyList<string> IgnoredTabs => _ignoredTabs;
 
-        internal void SetTabNames(IEnumerable<string> names)
+        internal void SetIgnoredTabs(IEnumerable<string> names)
         {
-            _tabNames.Clear();
-            _tabNames.AddRange(names);
+            _ignoredTabs.Clear();
+            _ignoredTabs.AddRange(names);
             EditorAssetUtils.MarkDirtyAndSave(this);
         }
 

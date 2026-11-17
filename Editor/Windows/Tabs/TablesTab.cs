@@ -8,7 +8,7 @@ using UnityEngine.UIElements;
 
 namespace TRnK.Localization
 {
-    /// <summary>Read-only browser for the synced tables, keys and translations.</summary>
+    /// <summary>Read-only browser for the imported tables, keys and translations.</summary>
     internal sealed class TablesTab : ITab
     {
         private const string MissingValueMark = "—";
@@ -385,16 +385,10 @@ namespace TRnK.Localization
         {
             if (_emptyState != null) return;
 
-            _emptyState = new VisualElement();
-            _emptyState.style.flexGrow = 1;
-            _emptyState.style.alignItems = Align.Center;
-            _emptyState.style.justifyContent = Justify.Center;
-
-            var msg = new Label(_config == null
+            _emptyState = new HelpBox(_config == null
                 ? "Select a LocalizationConfig asset above."
-                : "No tables yet. Sync from your spreadsheet to fill this config.");
-            msg.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _emptyState.Add(msg);
+                : "No tables yet. Import your spreadsheet to fill this config.", HelpBoxMessageType.Info);
+            _emptyState.style.marginTop = 8;
             _gridHost.Add(_emptyState);
         }
 

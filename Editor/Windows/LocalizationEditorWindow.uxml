@@ -12,9 +12,8 @@
 
         <!-- Tab bar -->
         <ui:VisualElement name="tabBar" class="tab-bar">
-            <ui:Button name="tab-sync"         text="Sync"       class="tab-button tab-button--active" />
-            <ui:Button name="tab-tables"       text="Tables"     class="tab-button" />
-            <ui:Button name="tab-validation"   text="Validation" class="tab-button" />
+            <ui:Button name="tab-import" text="Import" class="tab-button tab-button--active" />
+            <ui:Button name="tab-tables" text="Tables" class="tab-button" />
         </ui:VisualElement>
 
         <!-- Content panel — tabs swap their VisualElement into this -->

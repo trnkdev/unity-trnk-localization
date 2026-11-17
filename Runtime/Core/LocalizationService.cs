@@ -33,7 +33,7 @@ namespace TRnK.Localization
                 {
                     if (table == null)
                     {
-                        Log.Warn($"LocalizationConfig '{config.name}' has an empty table slot. Re-sync from the spreadsheet.");
+                        Log.Warn($"LocalizationConfig '{config.name}' has an empty table slot. Import the spreadsheet again.");
                         continue;
                     }
 
@@ -122,7 +122,7 @@ namespace TRnK.Localization
         {
             if (string.IsNullOrEmpty(table.TableName))
             {
-                Log.Warn($"Localization table asset '{table.name}' has no table name. Re-sync it from the spreadsheet.");
+                Log.Warn($"Localization table asset '{table.name}' has no table name. Import the spreadsheet again.");
                 return;
             }
 

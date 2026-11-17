@@ -10,34 +10,38 @@ using UnityEngine;
 
 namespace TRnK.Localization
 {
-    /// <summary>Writes synced spreadsheet data into table assets and lists them in the config.</summary>
+    /// <summary>Writes imported spreadsheet data into table assets and lists them in the config.</summary>
     internal static class SheetApply
     {
-        private const string UndoName = "Sync Localization";
+        private const string UndoName = "Import Localization";
         private const char InvalidFileNameReplacement = '_';
 
-        /// <summary>Rewrites every synced table from the sheet, updating existing assets in place.</summary>
-        internal static void ReplaceAll(LocalizationConfig config, CsvDiff.ParsedCsv csv, string newTablesFolder)
+        /// <summary>Rewrites every imported table from the sheet, updating existing assets in place.</summary>
+        internal static void ReplaceAll(LocalizationConfig config, SheetData data, string newTablesFolder)
         {
-            // One undo step per sync, even when several run in a frame
+            // One undo step per import, even when several run in a frame
             Undo.IncrementCurrentGroup();
             Undo.SetCurrentGroupName(UndoName);
             int undoGroup = Undo.GetCurrentGroup();
 
             var existing = FindTableAssets(config);
-            string[] locales = csv.LocaleCodes.ToArray();
-            var tables = new List<LocalizationTable>(csv.Data.Count);
+            string[] locales = data.LocaleCodes.ToArray();
+            var tables = new List<LocalizationTable>(data.Tables.Count);
 
-            foreach (var (tableName, rows) in csv.Data)
+            foreach (var (tableName, rows) in data.Tables)
             {
                 existing.TryGetValue(tableName, out var table);
                 tables.Add(WriteTable(table, tableName, locales, rows, newTablesFolder));
             }
 
+            foreach (var listed in config.Tables)
+                if (listed != null && !data.Tables.ContainsKey(listed.TableName))
+                    Log.Info($"Table '{listed.TableName}' is no longer in the spreadsheet: removed from the config, its asset is kept.");
+
             var so = new SerializedObject(config);
             so.Update();
 
-            ApplyLocales(so, csv);
+            ApplyLocales(so, data);
 
             var tablesProp = so.FindProperty("_tables");
             tablesProp.arraySize = tables.Count;
@@ -148,9 +152,9 @@ namespace TRnK.Localization
 
         // The spreadsheet header defines the locales — there is no other place to author them.
         // Existing entries keep their display name; the default locale falls back to the first column.
-        private static void ApplyLocales(SerializedObject so, CsvDiff.ParsedCsv csv)
+        private static void ApplyLocales(SerializedObject so, SheetData data)
         {
-            if (csv.LocaleCodes.Count == 0) return;
+            if (data.LocaleCodes.Count == 0) return;
 
             var existingNames = new Dictionary<string, string>(StringComparer.Ordinal);
             var localesProp = so.FindProperty("_locales");
@@ -165,7 +169,7 @@ namespace TRnK.Localization
 
             localesProp.ClearArray();
 
-            foreach (string code in csv.LocaleCodes)
+            foreach (string code in data.LocaleCodes)
             {
                 int index = localesProp.arraySize;
                 localesProp.InsertArrayElementAtIndex(index);
@@ -179,8 +183,8 @@ namespace TRnK.Localization
             }
 
             var defaultProp = so.FindProperty("_defaultLocale");
-            if (string.IsNullOrEmpty(defaultProp.stringValue) || !csv.LocaleCodes.Contains(defaultProp.stringValue))
-                defaultProp.stringValue = csv.LocaleCodes[0];
+            if (string.IsNullOrEmpty(defaultProp.stringValue) || !data.LocaleCodes.Contains(defaultProp.stringValue))
+                defaultProp.stringValue = data.LocaleCodes[0];
         }
 
         // "en" -> "English"; unknown codes keep the code itself

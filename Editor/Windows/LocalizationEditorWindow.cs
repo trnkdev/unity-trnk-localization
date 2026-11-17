@@ -78,9 +78,8 @@ namespace TRnK.Localization
 
             _tabButtons = new Dictionary<string, Button>
             {
-                { "Sync",       rootVisualElement.Q<Button>("tab-sync") },
-                { "Tables",     rootVisualElement.Q<Button>("tab-tables") },
-                { "Validation", rootVisualElement.Q<Button>("tab-validation") },
+                { "Import", rootVisualElement.Q<Button>("tab-import") },
+                { "Tables", rootVisualElement.Q<Button>("tab-tables") },
             };
         }
 
@@ -88,9 +87,8 @@ namespace TRnK.Localization
         {
             _tabs = new ITab[]
             {
-                new SyncTab(),
+                new ImportTab(),
                 new TablesTab(),
-                new ValidationTab(),
             };
 
             foreach (var tab in _tabs)

@@ -35,12 +35,12 @@ one column per locale code:
 | `quit_button` | Quit | Thoát | 終了 |
 
 Share it as *Anyone with the link → Viewer*, then open
-`Tools > TRnK > Localization Manager` → **Sync** tab, paste the spreadsheet
-URL, list your tab names, and hit **Sync from Spreadsheet**.
+`Tools > TRnK > Localization Manager` → **Import** tab, paste the spreadsheet
+URL, and hit **Import from Spreadsheet**.
 
 Each tab becomes one `LocalizationTable` asset (`UI.asset`, `Combat.asset`, …),
 created in the **Tables Folder** (the config's folder by default) and listed in
-the config. Re-syncing updates those assets in place.
+the config. Importing again updates those assets in place.
 
 **3. Initialize from your game bootstrap**
 
@@ -129,40 +129,35 @@ public void SetLanguage(string code)
 
 **Named vs positional:** `Loc.Get` uses **named** placeholders (`{damage}`) and returns a string. The TMP `SetLocalizedText` overloads use TMP's **positional** placeholders (`{0}`, `{1:00}`) and write straight into TMP's buffer — same package, two syntaxes, because the zero-allocation path is TMP's formatter, not ours.
 
-**Key validation:** `LocalizedString` fields tint green when the (table, key) pair exists in the config selected in the Localization Manager, red when it doesn't (or is empty), and stay neutral when no config is selected. Green means the key *exists* — per-locale coverage lives in the Validation tab. Editing a `LocalizedText` to a valid key refreshes its TMP text immediately; invalid keys never touch the text.
+**Key validation:** `LocalizedString` fields tint green when the (table, key) pair exists in the config selected in the Localization Manager, red when it doesn't (or is empty), and stay neutral when no config is selected. Green means the key *exists*, not that every locale has a value. Editing a `LocalizedText` to a valid key refreshes its TMP text immediately; invalid keys never touch the text.
 
 ## Spreadsheet Workflow
 
 The spreadsheet is the single source of truth. The config and table assets are
-build artifacts: synced from the sheet, never hand-edited — so the Tables and
-Validation tabs are read-only.
+build artifacts: imported from the sheet, never hand-edited.
 
-**Sync tab**
+**Import tab**
 
 | Field | Value |
 |---|---|
 | Spreadsheet URL | any URL of your spreadsheet |
-| Tab Names | one per line — `UI`, `Combat`, `Items` |
 | Tables Folder | where new table assets are created; empty = the config's folder |
+| Ignored Tabs | tabs to skip, e.g. `Rule` |
 
-Each tab is fetched as CSV by name (no API key or OAuth) and becomes a
-`LocalizationTable` asset of the same name. Locale columns in the header define
-the config's locales.
+The whole spreadsheet is downloaded once as `.xlsx` (no API key or OAuth), and
+every tab that isn't ignored becomes a `LocalizationTable` asset of the same
+name. A tab whose first header isn't `Key` is skipped with a warning. Locale
+columns in the header define the config's locales.
 
-Sync is **Replace-All**: every table is rewritten from the sheet, so anything
+Import is **Replace-All**: every table is rewritten from the sheet, so anything
 removed there is removed here. Existing table assets are updated in place,
 wherever you moved them, so references to them survive. A tab that disappears
 from the sheet is dropped from the config, but its asset stays in the project
 (and is reused if the tab comes back). Tables listed by another config are never
-touched, so several configs can share tab names. The download itself writes nothing — the diff
-preview (added / updated / removed) shows what will change, and only **Apply**
-commits it, undoable with Ctrl+Z.
+touched, so several configs can share tab names. The Console lists what was
+created and dropped, and Ctrl+Z undoes the whole import.
 
-If any tab fails to fetch or parse, nothing reaches the preview — a partial
-sync would otherwise read as "that table was deleted".
-
-**Export CSV** writes the current config to a file, for seeding a new
-spreadsheet or keeping a text backup.
+**Tables tab** shows every table as a key × locale grid with search.
 
 Requires the spreadsheet shared as *Anyone with the link → Viewer*.
 
@@ -226,22 +221,17 @@ Each tab is fetched by name, no API key or OAuth:
 
 **Requires** the spreadsheet shared as *Anyone with the link → Viewer*.
 
-### v0.5 — Editor UX (planned)
-
-The window works but was assembled feature-by-feature. This pass is about
-information architecture, not decoration:
-
-- Every screen states its status and next action — last sync time, what changed, what to do next
-- Empty states that teach the setup order instead of saying "nothing here"
-- The read-only views earn their keep: filter by locale, show only missing values, click a key to copy it for a `LocalizedString`
-- Validation links each defect back to the tab it came from
-- One shared spacing/typography scale instead of per-file hand-styling
-
 ### v0.6 — Per-Table Storage ✅
 
 - One flat `LocalizationTable` asset per spreadsheet tab (keys, locales, values arrays). Unity deserializes it straight into arrays, so there is no parse step at load and lookups are one dictionary hit
 - The config lists the tables; `Loc.AddTable` / `RemoveTable` / `HasTable` register others at runtime
 - `Loc.Initialize(config, initialLocale)` applies the saved language in one call
+
+### v0.7 — Simple Importer ✅
+
+- Two tabs: **Import** (URL, Tables Folder, Ignored Tabs, one button) and **Tables** (viewer)
+- The whole spreadsheet downloads once as `.xlsx`, so every tab is found automatically and quoted text can't merge rows
+- Removed: tab-name list, diff preview and Apply step, Validation tab, CSV export
 
 ### Rename Safety (planned)
 
@@ -250,8 +240,8 @@ time (good), but `LocalizedText` components store the table as a serialized
 string in scenes and prefabs — those go red in the inspector and must currently
 be fixed by hand.
 
-- Codegen table constants (`LocTable.CommonUI`) on sync — stale **code** references become compile errors naming every file and line
-- Rename detection in the sync diff preview: when the table set changes from `{UI, …}` to `{Common UI, …}`, offer a migration that rewrites the stored table string across all scenes and prefabs
+- Codegen table constants (`LocTable.CommonUI`) on import — stale **code** references become compile errors naming every file and line
+- Rename detection on import: when the table set changes from `{UI, …}` to `{Common UI, …}`, offer a migration that rewrites the stored table string across all scenes and prefabs
 
 ### v1.0 — Release (planned)
 - Codegen key constants (`Keys.UI.PlayButton`) — extends Rename Safety's table constants down to keys, so a missing key fails the build
