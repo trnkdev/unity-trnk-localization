@@ -28,7 +28,10 @@ namespace TRnK.Localization
             internal List<ChangeEntry> Updated = new();
             internal List<ChangeEntry> Removed = new();
 
-            internal int TotalChanges => Added.Count + Updated.Count + Removed.Count;
+            // Listed in the config but gone from the sheet
+            internal List<string> DroppedTables = new();
+
+            internal int TotalChanges => Added.Count + Updated.Count + Removed.Count + DroppedTables.Count;
         }
 
         internal struct ChangeEntry
@@ -40,7 +43,7 @@ namespace TRnK.Localization
             internal string NewValue;
         }
 
-        /// <summary>Computes a diff between parsed CSV data and the current config asset.</summary>
+        /// <summary>Computes a diff between parsed CSV data and the tables the config currently lists.</summary>
         internal static DiffResult Compute(LocalizationConfig config, ParsedCsv csv)
         {
             var result = new DiffResult();
@@ -50,20 +53,20 @@ namespace TRnK.Localization
             var current = new Dictionary<string, Dictionary<string, Dictionary<string, string>>>(StringComparer.Ordinal);
             foreach (var table in config.Tables)
             {
-                if (string.IsNullOrEmpty(table.Name)) continue;
+                if (table == null || string.IsNullOrEmpty(table.TableName)) continue;
+
                 var tableDict = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
-                foreach (var entry in table.Entries)
+                for (int row = 0; row < table.Keys.Count; row++)
                 {
-                    if (string.IsNullOrEmpty(entry.Key)) continue;
                     var keyDict = new Dictionary<string, string>(StringComparer.Ordinal);
-                    foreach (var lv in entry.Values)
-                    {
-                        if (!string.IsNullOrEmpty(lv.LocaleCode))
-                            keyDict[lv.LocaleCode] = lv.Value ?? string.Empty;
-                    }
-                    tableDict[entry.Key] = keyDict;
+                    for (int column = 0; column < table.Locales.Count; column++)
+                        keyDict[table.Locales[column]] = table.GetValue(row, column) ?? string.Empty;
+                    tableDict[table.Keys[row]] = keyDict;
                 }
-                current[table.Name] = tableDict;
+                current[table.TableName] = tableDict;
+
+                if (!csv.Data.ContainsKey(table.TableName))
+                    result.DroppedTables.Add(table.TableName);
             }
 
             // Compare CSV against current — Added & Updated

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using TRnK.Logger;
 
 namespace TRnK.Localization
@@ -12,8 +13,9 @@ namespace TRnK.Localization
         internal static event Action<string> LocaleChanged;
 
         private static LocalizationConfig s_config;
+        private static readonly Dictionary<string, LocalizationTable> s_tables = new(StringComparer.Ordinal);
 
-        internal static void Initialize(LocalizationConfig config)
+        internal static void Initialize(LocalizationConfig config, string initialLocale)
         {
             if (config == null)
             {
@@ -21,16 +23,32 @@ namespace TRnK.Localization
                 return;
             }
 
-            // Idempotent — re-initializing with the same asset is a no-op
-            if (s_config == config) return;
+            bool sameConfig = s_config == config;
+            if (!sameConfig)
+            {
+                s_config = config;
+                s_tables.Clear();
+
+                foreach (var table in config.Tables)
+                {
+                    if (table == null)
+                    {
+                        Log.Warn($"LocalizationConfig '{config.name}' has an empty table slot. Re-sync from the spreadsheet.");
+                        continue;
+                    }
+
+                    Register(table);
+                }
+
+                Log.Info($"TRnK.Localization initialized with '{config.name}' ({s_tables.Count} tables).");
+            }
+
+            // Same config and no locale: keep the current locale
+            if (sameConfig && string.IsNullOrEmpty(initialLocale)) return;
 
             string previousLocale = CurrentLocale;
+            CurrentLocale = ResolveLocale(config, initialLocale);
 
-            s_config = config;
-            CurrentLocale = config.DefaultLocale;
-            Log.Info($"TRnK.Localization initialized with '{config.name}'. Default locale: '{CurrentLocale}'.");
-
-            // Swapping configs can change the locale; listeners must refresh or they keep the old language
             if (!string.Equals(previousLocale, CurrentLocale, StringComparison.Ordinal))
                 LocaleChanged?.Invoke(CurrentLocale);
         }
@@ -61,12 +79,35 @@ namespace TRnK.Localization
             LocaleChanged?.Invoke(CurrentLocale);
         }
 
+        internal static void AddTable(LocalizationTable table)
+        {
+            if (!IsInitialized)
+            {
+                Log.Error("Cannot add table: TRnK.Localization is not initialized. Call Loc.Initialize() first.");
+                return;
+            }
+
+            if (table == null)
+            {
+                Log.Error("Cannot add table: table asset is null.");
+                return;
+            }
+
+            Register(table);
+        }
+
+        internal static bool RemoveTable(string tableName)
+            => !string.IsNullOrEmpty(tableName) && s_tables.Remove(tableName);
+
+        internal static bool HasTable(string tableName)
+            => !string.IsNullOrEmpty(tableName) && s_tables.ContainsKey(tableName);
+
         internal static string Get(string tableName, string key)
         {
 #if UNITY_EDITOR
-            // Editor tooling resolves against a config directly, without requiring Initialize
-            if (!UnityEngine.Application.isPlaying && s_editorConfig != null)
-                return GetFrom(s_editorConfig, s_editorLocale, tableName, key);
+            // Edit Mode preview, no Initialize needed
+            if (!UnityEngine.Application.isPlaying && s_editorTables != null)
+                return Lookup(s_editorTables, s_editorLocale, s_editorDefaultLocale, tableName, key);
 #endif
             if (!IsInitialized)
             {
@@ -74,29 +115,51 @@ namespace TRnK.Localization
                 return string.Empty;
             }
 
-            return GetFrom(s_config, CurrentLocale, tableName, key);
+            return Lookup(s_tables, CurrentLocale, s_config.DefaultLocale, tableName, key);
         }
 
-        private static string GetFrom(LocalizationConfig config, string locale, string tableName, string key)
+        private static void Register(LocalizationTable table)
+        {
+            if (string.IsNullOrEmpty(table.TableName))
+            {
+                Log.Warn($"Localization table asset '{table.name}' has no table name. Re-sync it from the spreadsheet.");
+                return;
+            }
+
+            if (s_tables.TryGetValue(table.TableName, out var existing) && existing != table)
+                Log.Warn($"Table '{table.TableName}' is already registered by '{existing.name}'; replacing it with '{table.name}'.");
+
+            s_tables[table.TableName] = table;
+        }
+
+        private static string ResolveLocale(LocalizationConfig config, string requested)
+        {
+            if (string.IsNullOrEmpty(requested)) return config.DefaultLocale;
+            if (config.HasLocale(requested)) return requested;
+
+            Log.Warn($"Locale '{requested}' is not registered in LocalizationConfig. Using default '{config.DefaultLocale}'.");
+            return config.DefaultLocale;
+        }
+
+        private static string Lookup(IReadOnlyDictionary<string, LocalizationTable> tables,
+                                     string locale, string defaultLocale, string tableName, string key)
         {
             if (string.IsNullOrEmpty(tableName) || string.IsNullOrEmpty(key))
                 return MissingKey(tableName, key, locale);
 
-            if (!config.TableExists(tableName))
+            if (!tables.TryGetValue(tableName, out var table))
             {
-                Log.Warn($"Table '{tableName}' does not exist in LocalizationConfig.");
+                Log.Warn($"Table '{tableName}' is not loaded. List it in LocalizationConfig or call Loc.AddTable() first.");
                 return MissingKey(tableName, key, locale);
             }
 
             // 1. Requested locale (treats empty value as missing)
-            if (config.TryGet(tableName, key, locale, out string value)
-                && !string.IsNullOrEmpty(value))
+            if (table.TryGetValue(key, locale, out string value) && !string.IsNullOrEmpty(value))
                 return value;
 
             // 2. Default locale fallback (only if different)
-            var defaultLocale = config.DefaultLocale;
             if (!string.Equals(locale, defaultLocale, StringComparison.Ordinal)
-                && config.TryGet(tableName, key, defaultLocale, out value)
+                && table.TryGetValue(key, defaultLocale, out value)
                 && !string.IsNullOrEmpty(value))
                 return value;
 
@@ -116,29 +179,33 @@ namespace TRnK.Localization
 
 #if UNITY_EDITOR
         // Editor-tooling lookup override — set only by the editor assembly, inert while playing
-        private static LocalizationConfig s_editorConfig;
+        private static IReadOnlyDictionary<string, LocalizationTable> s_editorTables;
         private static string s_editorLocale;
+        private static string s_editorDefaultLocale;
 
-        internal static void SetEditorLookup(LocalizationConfig config, string localeCode)
+        internal static void SetEditorLookup(IReadOnlyDictionary<string, LocalizationTable> tables,
+                                             string localeCode, string defaultLocale)
         {
-            s_editorConfig = config;
+            s_editorTables = tables;
             s_editorLocale = localeCode;
+            s_editorDefaultLocale = defaultLocale;
         }
 
         internal static void ClearEditorLookup()
         {
-            s_editorConfig = null;
+            s_editorTables = null;
             s_editorLocale = null;
+            s_editorDefaultLocale = null;
         }
 
         [UnityEditor.InitializeOnEnterPlayMode]
         private static void ResetOnEnterPlayMode(UnityEditor.EnterPlayModeOptions _)
         {
             s_config = null;
+            s_tables.Clear();
             CurrentLocale = null;
             LocaleChanged = null;
-            s_editorConfig = null;
-            s_editorLocale = null;
+            ClearEditorLookup();
         }
 #endif
     }

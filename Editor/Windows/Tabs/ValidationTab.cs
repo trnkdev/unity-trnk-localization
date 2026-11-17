@@ -129,38 +129,49 @@ namespace TRnK.Localization
 
             foreach (var table in _config.Tables)
             {
-                if (string.IsNullOrWhiteSpace(table.Name))
-                    report.Issues.Add("A table has an empty name.");
-
-                if (!seenKeysPerTable.TryGetValue(table.Name ?? "", out var seenKeys))
+                if (table == null)
                 {
-                    seenKeys = new HashSet<string>();
-                    seenKeysPerTable[table.Name ?? ""] = seenKeys;
+                    report.Issues.Add("The config lists a table asset that no longer exists. Sync again to rebuild the list.");
+                    continue;
                 }
 
-                foreach (var entry in table.Entries)
+                string tableName = table.TableName;
+                if (string.IsNullOrWhiteSpace(tableName))
+                    report.Issues.Add($"Table asset '{table.name}' has an empty table name.");
+
+                if (!seenKeysPerTable.TryGetValue(tableName ?? "", out var seenKeys))
                 {
-                    if (string.IsNullOrWhiteSpace(entry.Key))
+                    seenKeys = new HashSet<string>();
+                    seenKeysPerTable[tableName ?? ""] = seenKeys;
+                }
+                else
+                {
+                    report.Issues.Add($"Two table assets share the name '{tableName}'; only one is used at runtime.");
+                }
+
+                for (int row = 0; row < table.Keys.Count; row++)
+                {
+                    string key = table.Keys[row];
+                    if (string.IsNullOrWhiteSpace(key))
                     {
-                        report.Issues.Add($"[{table.Name}] An entry has an empty key.");
+                        report.Issues.Add($"[{tableName}] An entry has an empty key.");
                         continue;
                     }
 
-                    if (!seenKeys.Add(entry.Key))
-                        report.Issues.Add($"[{table.Name}] Duplicate key: '{entry.Key}'.");
+                    if (!seenKeys.Add(key))
+                        report.Issues.Add($"[{tableName}] Duplicate key: '{key}'.");
 
                     totalEntries++;
 
                     foreach (var code in localeCodes)
                     {
-                        string value = null;
-                        foreach (var lv in entry.Values)
-                            if (lv.LocaleCode == code) { value = lv.Value; break; }
+                        int column = table.IndexOfLocale(code);
+                        string value = column >= 0 ? table.GetValue(row, column) : null;
 
                         if (!string.IsNullOrEmpty(value))
                             filledPerLocale[code]++;
                         else
-                            report.Issues.Add($"[{table.Name}] '{entry.Key}' missing translation for '{code}'.");
+                            report.Issues.Add($"[{tableName}] '{key}' missing translation for '{code}'.");
                     }
                 }
             }

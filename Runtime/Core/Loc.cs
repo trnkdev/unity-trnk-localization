@@ -18,13 +18,25 @@ namespace TRnK.Localization
             remove => LocalizationService.LocaleChanged -= value;
         }
 
-        /// <summary>Initializes the localization service with a config instance.</summary>
-        public static void Initialize(LocalizationConfig config)
-            => LocalizationService.Initialize(config);
+        /// <summary>Initializes the service with a config and an optional starting locale.</summary>
+        public static void Initialize(LocalizationConfig config, string initialLocale = null)
+            => LocalizationService.Initialize(config, initialLocale);
 
         /// <summary>Switches the active locale. Fires <see cref="LocaleChanged"/> if the locale changes.</summary>
         public static void SetLocale(string localeCode)
             => LocalizationService.SetLocale(localeCode);
+
+        /// <summary>Registers a table not listed in the config.</summary>
+        public static void AddTable(LocalizationTable table)
+            => LocalizationService.AddTable(table);
+
+        /// <summary>Unregisters a table by name.</summary>
+        public static bool RemoveTable(string tableName)
+            => LocalizationService.RemoveTable(tableName);
+
+        /// <summary>Whether a table is registered.</summary>
+        public static bool HasTable(string tableName)
+            => LocalizationService.HasTable(tableName);
 
         /// <summary>Returns the translated string for a table/key pair, falling back to the default locale when missing.</summary>
         public static string Get(string tableName, string key)

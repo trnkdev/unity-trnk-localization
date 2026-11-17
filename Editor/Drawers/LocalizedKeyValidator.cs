@@ -1,4 +1,6 @@
 #if UNITY_EDITOR
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace TRnK.Localization
@@ -55,10 +57,11 @@ namespace TRnK.Localization
             if (noKey)
                 return new LocalizedKeyResult(LocalizedKeyState.Missing, "Key is empty.");
 
-            if (!config.TableExists(table))
+            var tableAsset = config.FindTable(table);
+            if (tableAsset == null)
                 return new LocalizedKeyResult(LocalizedKeyState.Missing, $"Table '{table}' not found in '{config.name}'.");
 
-            if (!config.KeyExists(table, key))
+            if (!tableAsset.ContainsKey(key))
                 return new LocalizedKeyResult(LocalizedKeyState.Missing, $"Key '{key}' not found in table '{table}'.");
 
             return new LocalizedKeyResult(LocalizedKeyState.Valid, $"'{table}/{key}' found in '{config.name}'.");
@@ -76,10 +79,19 @@ namespace TRnK.Localization
                 ? localeCode
                 : config.DefaultLocale;
 
-            // Resolve against the config directly — Loc.Initialize has not run in Edit Mode
-            LocalizationService.SetEditorLookup(config, locale);
+            // Loc is not initialized in Edit Mode
+            LocalizationService.SetEditorLookup(TablesByName(config), locale, config.DefaultLocale);
             component.RefreshEditorText();
             LocalizationService.ClearEditorLookup();
+        }
+
+        private static Dictionary<string, LocalizationTable> TablesByName(LocalizationConfig config)
+        {
+            var tables = new Dictionary<string, LocalizationTable>(StringComparer.Ordinal);
+            foreach (var table in config.Tables)
+                if (table != null && !string.IsNullOrEmpty(table.TableName))
+                    tables.TryAdd(table.TableName, table);
+            return tables;
         }
     }
 }

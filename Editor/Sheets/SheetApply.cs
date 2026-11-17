@@ -2,62 +2,130 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
+using TRnK.Logger;
+using TRnK.Toolkit;
 using UnityEditor;
+using UnityEngine;
 
 namespace TRnK.Localization
 {
-    /// <summary>Writes synced spreadsheet data into the config, replacing its tables wholesale.</summary>
+    /// <summary>Writes synced spreadsheet data into table assets and lists them in the config.</summary>
     internal static class SheetApply
     {
-        /// <summary>
-        /// The spreadsheet is the only author, so the config's tables are rebuilt
-        /// from it — no merging, and anything absent from the sheet is gone.
-        /// </summary>
-        internal static void ReplaceAll(LocalizationConfig config, CsvDiff.ParsedCsv csv)
+        private const string UndoName = "Sync Localization";
+        private const char InvalidFileNameReplacement = '_';
+
+        /// <summary>Rewrites every synced table from the sheet, updating existing assets in place.</summary>
+        internal static void ReplaceAll(LocalizationConfig config, CsvDiff.ParsedCsv csv, string newTablesFolder)
         {
+            // One undo step per sync, even when several run in a frame
+            Undo.IncrementCurrentGroup();
+            Undo.SetCurrentGroupName(UndoName);
+            int undoGroup = Undo.GetCurrentGroup();
+
+            var existing = FindTableAssets(config);
+            string[] locales = csv.LocaleCodes.ToArray();
+            var tables = new List<LocalizationTable>(csv.Data.Count);
+
+            foreach (var (tableName, rows) in csv.Data)
+            {
+                existing.TryGetValue(tableName, out var table);
+                tables.Add(WriteTable(table, tableName, locales, rows, newTablesFolder));
+            }
+
             var so = new SerializedObject(config);
             so.Update();
 
             ApplyLocales(so, csv);
 
             var tablesProp = so.FindProperty("_tables");
-            tablesProp.ClearArray();
-
-            foreach (var (tableName, csvTable) in csv.Data)
-            {
-                int tableIndex = tablesProp.arraySize;
-                tablesProp.InsertArrayElementAtIndex(tableIndex);
-
-                var tableProp = tablesProp.GetArrayElementAtIndex(tableIndex);
-                tableProp.FindPropertyRelative("_name").stringValue = tableName;
-
-                var entriesProp = tableProp.FindPropertyRelative("_entries");
-                entriesProp.ClearArray();
-
-                foreach (var (key, csvKey) in csvTable)
-                {
-                    int entryIndex = entriesProp.arraySize;
-                    entriesProp.InsertArrayElementAtIndex(entryIndex);
-
-                    var entryProp = entriesProp.GetArrayElementAtIndex(entryIndex);
-                    entryProp.FindPropertyRelative("_key").stringValue = key;
-
-                    var valuesProp = entryProp.FindPropertyRelative("_values");
-                    valuesProp.ClearArray();
-
-                    foreach (var (locale, value) in csvKey)
-                    {
-                        int valueIndex = valuesProp.arraySize;
-                        valuesProp.InsertArrayElementAtIndex(valueIndex);
-
-                        var valueProp = valuesProp.GetArrayElementAtIndex(valueIndex);
-                        valueProp.FindPropertyRelative("LocaleCode").stringValue = locale;
-                        valueProp.FindPropertyRelative("Value").stringValue = value;
-                    }
-                }
-            }
+            tablesProp.arraySize = tables.Count;
+            for (int i = 0; i < tables.Count; i++)
+                tablesProp.GetArrayElementAtIndex(i).objectReferenceValue = tables[i];
 
             so.ApplyModifiedProperties();
+
+            AssetDatabase.SaveAssets();
+            Undo.CollapseUndoOperations(undoGroup);
+        }
+
+        /// <summary>The configured folder for new tables, or the config's own folder.</summary>
+        internal static string ResolveNewTablesFolder(LocalizationConfig config, string configuredFolder)
+        {
+            if (!string.IsNullOrEmpty(configuredFolder)) return configuredFolder;
+            return Path.GetDirectoryName(AssetDatabase.GetAssetPath(config))?.Replace('\\', '/');
+        }
+
+        private static LocalizationTable WriteTable(LocalizationTable table, string tableName, string[] locales,
+                                                    Dictionary<string, Dictionary<string, string>> rows, string newTablesFolder)
+        {
+            var keys = new string[rows.Count];
+            var values = new string[rows.Count * locales.Length];
+
+            int row = 0;
+            foreach (var (key, byLocale) in rows)
+            {
+                keys[row] = key;
+                for (int column = 0; column < locales.Length; column++)
+                    values[row * locales.Length + column] =
+                        byLocale.TryGetValue(locales[column], out string value) ? value : string.Empty;
+                row++;
+            }
+
+            if (table != null)
+            {
+                Undo.RecordObject(table, UndoName);
+                table.SetData(tableName, (string[])locales.Clone(), keys, values);
+                EditorUtility.SetDirty(table);
+                return table;
+            }
+
+            table = ScriptableObject.CreateInstance<LocalizationTable>();
+            table.SetData(tableName, (string[])locales.Clone(), keys, values);
+
+            EditorAssetUtils.EnsureFolderPath(newTablesFolder);
+            string path = AssetDatabase.GenerateUniqueAssetPath($"{newTablesFolder}/{SafeFileName(tableName)}.asset");
+            AssetDatabase.CreateAsset(table, path);
+            Undo.RegisterCreatedObjectUndo(table, UndoName);
+
+            Log.Info($"Created localization table '{tableName}' at '{path}'.");
+            return table;
+        }
+
+        // Config tables first, then any project asset, so a dropped table is reused, not duplicated
+        private static Dictionary<string, LocalizationTable> FindTableAssets(LocalizationConfig config)
+        {
+            var byName = new Dictionary<string, LocalizationTable>(StringComparer.Ordinal);
+
+            foreach (var table in config.Tables)
+                if (table != null && !string.IsNullOrEmpty(table.TableName))
+                    byName.TryAdd(table.TableName, table);
+
+            foreach (string guid in AssetDatabase.FindAssets($"t:{nameof(LocalizationTable)}"))
+            {
+                var table = AssetDatabase.LoadAssetAtPath<LocalizationTable>(AssetDatabase.GUIDToAssetPath(guid));
+                if (table == null || string.IsNullOrEmpty(table.TableName)) continue;
+
+                if (byName.TryGetValue(table.TableName, out var kept) && kept != table)
+                {
+                    Log.Warn($"Two assets hold table '{table.TableName}': '{AssetDatabase.GetAssetPath(kept)}' is updated, '{AssetDatabase.GetAssetPath(table)}' is ignored.");
+                    continue;
+                }
+
+                byName[table.TableName] = table;
+            }
+
+            return byName;
+        }
+
+        private static string SafeFileName(string tableName)
+        {
+            var chars = tableName.ToCharArray();
+            var invalid = Path.GetInvalidFileNameChars();
+            for (int i = 0; i < chars.Length; i++)
+                if (Array.IndexOf(invalid, chars[i]) >= 0) chars[i] = InvalidFileNameReplacement;
+            return new string(chars);
         }
 
         // The spreadsheet header defines the locales — there is no other place to author them.

@@ -20,6 +20,8 @@ namespace TRnK.Localization
 
         [SerializeField] private List<string> _tabNames = new();
 
+        [SerializeField] private string _tablesFolder;
+
         /// <summary>Any URL of the Google spreadsheet holding the localization tabs.</summary>
         internal string SpreadsheetUrl
         {
@@ -40,6 +42,18 @@ namespace TRnK.Localization
             _tabNames.Clear();
             _tabNames.AddRange(names);
             EditorAssetUtils.MarkDirtyAndSave(this);
+        }
+
+        /// <summary>Folder for new table assets. Empty means the config's folder.</summary>
+        internal string TablesFolder
+        {
+            get => _tablesFolder;
+            set
+            {
+                if (_tablesFolder == value) return;
+                _tablesFolder = value;
+                EditorAssetUtils.MarkDirtyAndSave(this);
+            }
         }
 
         /// <summary>The config the Localization Manager (and editor validation) works against.</summary>

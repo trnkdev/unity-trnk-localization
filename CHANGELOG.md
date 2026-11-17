@@ -1,3 +1,27 @@
+## [0.6.0] - 2026-11-16
+
+### Per-Table Storage
+
+Each spreadsheet tab is now its own flat `LocalizationTable` asset instead of nested lists inside the config. Unity deserializes it straight into arrays, so loading needs no parse step and a lookup is one dictionary hit plus an array index. Measured on a 2,826-key x 9-locale table (IL2CPP, desktop): about 4x faster to load and 8x less garbage than a JSON table, and 2x faster than the old nested layout.
+
+**Added**
+
+- `LocalizationTable` asset: table name plus `keys`, `locales` and row-major `values` arrays. Its key index is built on first lookup.
+- `Loc.AddTable`, `Loc.RemoveTable` and `Loc.HasTable`, for tables the game registers itself. Add a table before showing UI that uses it.
+- `Loc.Initialize(config, initialLocale)`: applies a saved language in the same call. A null or unknown code falls back to the default locale.
+- **Tables Folder** on the Sync tab: where new table assets are created (defaults to the config's folder).
+
+**Changed**
+
+- `LocalizationConfig` lists table asset references instead of holding the data.
+- Sync writes table assets: existing ones are updated in place, wherever they live, so their GUID and references survive; new tabs create new assets. One Undo reverts one sync.
+- A tab that disappears from the sheet is dropped from the config, shown in the preview first, and its asset is kept on disk and reused if the tab returns.
+- Tables, Validation, export and key validation read from the table assets.
+
+**Removed**
+
+- `TableEntry` and `LocaleValue`. Configs synced with 0.5 must be synced again.
+
 ## [0.4.0] - 2026-07-26
 
 ### Single Source of Truth

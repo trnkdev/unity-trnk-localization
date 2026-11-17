@@ -45,78 +45,14 @@ namespace TRnK.Localization
             return false;
         }
 
-        // Lazy index: tableName -> (key -> (localeCode -> value))
-        private Dictionary<string, Dictionary<string, Dictionary<string, string>>> _index;
-
-        internal bool TryGet(string tableName, string key, string localeCode, out string value)
+        /// <summary>Finds a listed table by its table name, or null.</summary>
+        internal LocalizationTable FindTable(string tableName)
         {
-            if (_index == null) BuildIndex();
-
-            if (_index.TryGetValue(tableName, out var tableIndex)
-                && tableIndex.TryGetValue(key, out var keyIndex)
-                && keyIndex.TryGetValue(localeCode, out value))
-                return true;
-
-            value = null;
-            return false;
-        }
-
-        internal bool TableExists(string tableName)
-        {
-            if (_index == null) BuildIndex();
-            return _index.ContainsKey(tableName);
-        }
-
-        internal bool KeyExists(string tableName, string key)
-        {
-            if (_index == null) BuildIndex();
-            return _index.TryGetValue(tableName, out var tableIndex) && tableIndex.ContainsKey(key);
-        }
-
-        internal void InvalidateIndex() => _index = null;
-
-        private void BuildIndex()
-        {
-            _index = new Dictionary<string, Dictionary<string, Dictionary<string, string>>>(
-                _tables.Count, StringComparer.Ordinal);
-
+            if (string.IsNullOrEmpty(tableName)) return null;
             foreach (var table in _tables)
-            {
-                if (string.IsNullOrWhiteSpace(table.Name)) continue;
-
-                if (_index.ContainsKey(table.Name))
-                {
-                    Log.Warn($"Duplicate table name '{table.Name}' in LocalizationConfig '{name}'.");
-                    continue;
-                }
-
-                var tableDict = new Dictionary<string, Dictionary<string, string>>(
-                    table.Entries.Count, StringComparer.Ordinal);
-
-                foreach (var entry in table.Entries)
-                {
-                    if (string.IsNullOrWhiteSpace(entry.Key)) continue;
-
-                    if (tableDict.ContainsKey(entry.Key))
-                    {
-                        Log.Warn($"Duplicate key '{entry.Key}' in table '{table.Name}'.");
-                        continue;
-                    }
-
-                    var keyDict = new Dictionary<string, string>(
-                        entry.Values.Count, StringComparer.Ordinal);
-
-                    foreach (var lv in entry.Values)
-                    {
-                        if (string.IsNullOrWhiteSpace(lv.LocaleCode)) continue;
-                        keyDict[lv.LocaleCode] = lv.Value;
-                    }
-
-                    tableDict[entry.Key] = keyDict;
-                }
-
-                _index[table.Name] = tableDict;
-            }
+                if (table != null && string.Equals(table.TableName, tableName, StringComparison.Ordinal))
+                    return table;
+            return null;
         }
 
 #if ODIN_INSPECTOR
@@ -131,12 +67,9 @@ namespace TRnK.Localization
 #if UNITY_EDITOR
         private void OnValidate()
         {
-            InvalidateIndex();
-
             if (!string.IsNullOrEmpty(_defaultLocale) && !HasLocale(_defaultLocale))
                 Log.Warn($"DefaultLocale '{_defaultLocale}' is not in the Locales list on '{name}'.");
         }
-
 #endif
     }
 }

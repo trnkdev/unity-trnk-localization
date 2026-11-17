@@ -168,7 +168,7 @@ namespace TRnK.Localization
             int locales = _config.Locales?.Count ?? 0;
             int tables = _config.Tables?.Count ?? 0;
             int keys = 0;
-            foreach (var t in _config.Tables) keys += t.Entries?.Count ?? 0;
+            foreach (var t in _config.Tables) keys += t != null ? t.Keys.Count : 0;
 
             _statusLabel.text = $"{locales} locales · {tables} tables · {keys} keys";
         }

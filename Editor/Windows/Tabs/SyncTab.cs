@@ -20,6 +20,9 @@ namespace TRnK.Localization
         private const float ActionButtonHeight = 22f;
         private const float LabelMinWidth = 180f;
         private const float LabelMaxWidth = 320f;
+        private const string FolderTooltip =
+            "Where sync creates new table assets. Existing tables are updated wherever they are. Empty uses the config's folder.";
+        private const string FolderPickerTitle = "Folder for New Localization Tables";
         private const string SheetHelp =
             "Each tab needs a 'Key' column followed by one column per locale code. " +
             "Share the spreadsheet as 'Anyone with the link → Viewer'.";
@@ -91,6 +94,46 @@ namespace TRnK.Localization
             _body.Add(urlField);
 
             _body.Add(BuildTabList(settings));
+            _body.Add(BuildFolderRow(settings));
+        }
+
+        private VisualElement BuildFolderRow(LocalizationEditorSettings settings)
+        {
+            var row = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 4 } };
+
+            var field = new TextField("Tables Folder") { value = settings.TablesFolder, isDelayed = true, tooltip = FolderTooltip };
+            field.textEdition.placeholder = SheetApply.ResolveNewTablesFolder(_config, null);
+            field.textEdition.hidePlaceholderOnFocus = false;
+            field.style.flexGrow = 1;
+            field.RegisterValueChangedCallback(evt =>
+                LocalizationEditorSettings.GetOrCreate().TablesFolder = evt.newValue?.Trim().TrimEnd('/'));
+            row.Add(field);
+
+            var browse = new Button(() =>
+            {
+                string absolute = EditorUtility.OpenFolderPanel(FolderPickerTitle, Application.dataPath, string.Empty);
+                if (string.IsNullOrEmpty(absolute)) return;
+
+                string relative = ToAssetsRelative(absolute);
+                if (relative == null)
+                {
+                    EditorUtility.DisplayDialog("Invalid Folder", "Pick a folder inside this project's Assets folder.", "OK");
+                    return;
+                }
+
+                field.value = relative;
+            }) { text = "Browse…" };
+            row.Add(browse);
+
+            return row;
+        }
+
+        private static string ToAssetsRelative(string absolutePath)
+        {
+            string path = absolutePath.Replace('\\', '/');
+            string dataPath = Application.dataPath.Replace('\\', '/');
+            if (!path.StartsWith(dataPath, System.StringComparison.OrdinalIgnoreCase)) return null;
+            return "Assets" + path.Substring(dataPath.Length);
         }
 
         private VisualElement BuildTabList(LocalizationEditorSettings settings)
@@ -223,6 +266,12 @@ namespace TRnK.Localization
             if (_pendingCsv.Warnings.Count > 0)
                 section.Add(new HelpBox(string.Join("\n", _pendingCsv.Warnings), HelpBoxMessageType.Warning));
 
+            if (_pendingDiff.DroppedTables.Count > 0)
+                section.Add(new HelpBox(
+                    $"No longer in the spreadsheet: {string.Join(", ", _pendingDiff.DroppedTables)}. " +
+                    "Apply removes them from the config; their table assets stay in the project.",
+                    HelpBoxMessageType.Warning));
+
             // Grows into the window instead of scrolling inside a fixed box
             var scroll = new ScrollView { style = { flexGrow = 1, minHeight = 120, marginTop = 4, marginBottom = 8 } };
             scroll.style.borderTopWidth = 1;
@@ -311,12 +360,8 @@ namespace TRnK.Localization
         {
             if (_config == null || _pendingCsv == null) return;
 
-            Undo.RecordObject(_config, "Sync Localization");
-            SheetApply.ReplaceAll(_config, _pendingCsv);
-
-            _config.InvalidateIndex();
-            EditorUtility.SetDirty(_config);
-            AssetDatabase.SaveAssetIfDirty(_config);
+            string folder = SheetApply.ResolveNewTablesFolder(_config, LocalizationEditorSettings.GetOrCreate().TablesFolder);
+            SheetApply.ReplaceAll(_config, _pendingCsv, folder);
 
             Log.Info("Localization synced from spreadsheet.");
             ClearPending();
@@ -373,17 +418,15 @@ namespace TRnK.Localization
 
             foreach (var table in _config.Tables)
             {
-                foreach (var entry in table.Entries)
+                if (table == null) continue;
+
+                for (int r = 0; r < table.Keys.Count; r++)
                 {
-                    var row = new List<string> { table.Name, entry.Key };
+                    var row = new List<string> { table.TableName, table.Keys[r] };
                     foreach (string code in localeCodes)
                     {
-                        string value = string.Empty;
-                        foreach (var lv in entry.Values)
-                        {
-                            if (lv.LocaleCode == code) { value = lv.Value ?? string.Empty; break; }
-                        }
-                        row.Add(value);
+                        int column = table.IndexOfLocale(code);
+                        row.Add(column >= 0 ? table.GetValue(r, column) ?? string.Empty : string.Empty);
                     }
                     rows.Add(row);
                 }

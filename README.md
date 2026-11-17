@@ -22,7 +22,7 @@ https://github.com/trnkdev/unity-trnk-localization.git
 
 **1. Create the config asset**
 
-`Assets > Create > TRnK > Localization > Config` — place it anywhere inside a `Resources` folder (e.g. `Assets/Resources/LocalizationConfig.asset`).
+`Assets > Create > TRnK > Localization > Localization Config` — place it anywhere (e.g. `Assets/Localization/LocalizationConfig.asset`).
 
 **2. Author your data in Google Sheets**
 
@@ -38,9 +38,13 @@ Share it as *Anyone with the link → Viewer*, then open
 `Tools > TRnK > Localization Manager` → **Sync** tab, paste the spreadsheet
 URL, list your tab names, and hit **Sync from Spreadsheet**.
 
+Each tab becomes one `LocalizationTable` asset (`UI.asset`, `Combat.asset`, …),
+created in the **Tables Folder** (the config's folder by default) and listed in
+the config. Re-syncing updates those assets in place.
+
 **3. Initialize from your game bootstrap**
 
-`Loc.Initialize` takes a `LocalizationConfig` instance — load it however your project loads assets (Resources, Addressables, a direct Inspector reference, …) and pass it in.
+`Loc.Initialize` takes a `LocalizationConfig` instance — load it however your project loads assets (Resources, Addressables, a direct Inspector reference, …) and pass it in. The tables the config lists come with it, so lookups work as soon as `Initialize` returns.
 
 ```csharp
 using TRnK.Localization;
@@ -52,11 +56,9 @@ public class GameBootstrap : MonoBehaviour
 
     void Awake()
     {
-        Loc.Initialize(_localizationConfig);
-
+        // A null or unknown saved code falls back to the config's default locale
         var save = SaveSystem.Load();
-        if (!string.IsNullOrEmpty(save.languageCode))
-            Loc.SetLocale(save.languageCode);
+        Loc.Initialize(_localizationConfig, save.languageCode);
     }
 }
 ```
@@ -95,6 +97,11 @@ void Show() => _ui.SetText(_tooltip.Get());
 void OnEnable()  => Loc.LocaleChanged += OnLocale;
 void OnDisable() => Loc.LocaleChanged -= OnLocale;
 
+// Tables not listed in the config — register them before showing UI that uses them
+Loc.AddTable(levelTable);
+bool loaded = Loc.HasTable("Level_1_100");
+Loc.RemoveTable("Level_1_100");        // unloading the asset is up to you
+
 // Language switcher
 public void SetLanguage(string code)
 {
@@ -112,7 +119,9 @@ public void SetLanguage(string code)
 2. Fall back to default locale (if different)
 3. Editor: logs a warning and returns `#Table.key` · Player builds: returns `""`
 
-**Initialization:** idempotent — calling `Initialize` twice with the same asset is a no-op and preserves the current locale. Initializing with a different asset resets to that asset's default locale.
+**Initialization:** registers every table the config lists and sets the locale to `initialLocale`, or the config's default when that is null or unknown. Calling it again with the same asset keeps the registered tables (including ones added with `AddTable`) and the current locale, applying `initialLocale` only if one is given; a different asset replaces all registered tables.
+
+**Tables:** `Loc.Get` reads only registered tables — the config's, plus any passed to `AddTable`. A table name that isn't registered logs a warning and goes through the missing-key fallback below. `LocalizedText` reads its text on enable and on locale change only, so add a table before showing UI that uses it, and remove it only after leaving that UI. Each table holds every locale, so `SetLocale` never reloads anything.
 
 **`SetLocale`** with an unregistered code is ignored (with a warning). Setting the same locale twice doesn't re-fire `LocaleChanged`.
 
@@ -124,8 +133,8 @@ public void SetLanguage(string code)
 
 ## Spreadsheet Workflow
 
-The spreadsheet is the single source of truth. The config asset is a build
-artifact: synced from the sheet, never hand-edited — so the Tables and
+The spreadsheet is the single source of truth. The config and table assets are
+build artifacts: synced from the sheet, never hand-edited — so the Tables and
 Validation tabs are read-only.
 
 **Sync tab**
@@ -134,12 +143,17 @@ Validation tabs are read-only.
 |---|---|
 | Spreadsheet URL | any URL of your spreadsheet |
 | Tab Names | one per line — `UI`, `Combat`, `Items` |
+| Tables Folder | where new table assets are created; empty = the config's folder |
 
-Each tab is fetched as CSV by name (no API key or OAuth) and becomes a table
-of the same name. Locale columns in the header define the config's locales.
+Each tab is fetched as CSV by name (no API key or OAuth) and becomes a
+`LocalizationTable` asset of the same name. Locale columns in the header define
+the config's locales.
 
-Sync is **Replace-All**: the config is rebuilt from the sheet, so anything
-removed there is removed here. The download itself writes nothing — the diff
+Sync is **Replace-All**: every table is rewritten from the sheet, so anything
+removed there is removed here. Existing table assets are updated in place,
+wherever you moved them, so references to them survive. A tab that disappears
+from the sheet is dropped from the config, but its asset stays in the project
+(and is reused if the tab comes back). The download itself writes nothing — the diff
 preview (added / updated / removed) shows what will change, and only **Apply**
 commits it, undoable with Ctrl+Z.
 
@@ -222,7 +236,13 @@ information architecture, not decoration:
 - Validation links each defect back to the tab it came from
 - One shared spacing/typography scale instead of per-file hand-styling
 
-### v0.6 — Rename Safety (planned)
+### v0.6 — Per-Table Storage ✅
+
+- One flat `LocalizationTable` asset per spreadsheet tab (keys, locales, values arrays). Unity deserializes it straight into arrays, so there is no parse step at load and lookups are one dictionary hit
+- The config lists the tables; `Loc.AddTable` / `RemoveTable` / `HasTable` register others at runtime
+- `Loc.Initialize(config, initialLocale)` applies the saved language in one call
+
+### Rename Safety (planned)
 
 Renaming a spreadsheet tab renames its table. Code references break at compile
 time (good), but `LocalizedText` components store the table as a serialized
@@ -233,7 +253,7 @@ be fixed by hand.
 - Rename detection in the sync diff preview: when the table set changes from `{UI, …}` to `{Common UI, …}`, offer a migration that rewrites the stored table string across all scenes and prefabs
 
 ### v1.0 — Release (planned)
-- Codegen key constants (`Keys.UI.PlayButton`) — extends v0.6's table constants down to keys, so a missing key fails the build
+- Codegen key constants (`Keys.UI.PlayButton`) — extends Rename Safety's table constants down to keys, so a missing key fails the build
 - Sample scenes and common patterns
 - Full API documentation
 

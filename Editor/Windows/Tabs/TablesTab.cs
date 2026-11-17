@@ -135,7 +135,8 @@ namespace TRnK.Localization
             if (_config != null)
             {
                 foreach (var table in _config.Tables)
-                    _tableNames.Add(string.IsNullOrEmpty(table.Name) ? "(unnamed)" : table.Name);
+                    _tableNames.Add(table == null ? "(missing asset)"
+                        : string.IsNullOrEmpty(table.TableName) ? "(unnamed)" : table.TableName);
             }
 
             _tableList?.RefreshItems();
@@ -163,7 +164,7 @@ namespace TRnK.Localization
                 _grid.parent.Remove(_grid);
             _grid = null;
 
-            if (_config == null || _selectedTableIndex < 0 || _selectedTableIndex >= _config.Tables.Count)
+            if (SelectedTable == null)
             {
                 ShowEmptyState();
                 UpdateStatus();
@@ -251,14 +252,13 @@ namespace TRnK.Localization
             var style = isKeyColumn ? EditorStyles.boldLabel : EditorStyles.label;
 
             float widest = style.CalcSize(new GUIContent(column.title.ToString())).x;
-            var entries = _config.Tables[_selectedTableIndex].Entries;
+            var table = SelectedTable;
 
-            foreach (int entryIndex in _visibleEntryIndices)
+            foreach (int row in _visibleEntryIndices)
             {
-                if (entryIndex >= entries.Count) continue;
-                var entry = entries[entryIndex];
+                if (row >= table.Keys.Count) continue;
 
-                string text = isKeyColumn ? entry.Key : ValueFor(entry, column.title.ToString());
+                string text = isKeyColumn ? table.Keys[row] : ValueFor(table, row, column.title.ToString());
                 if (string.IsNullOrEmpty(text)) continue;
 
                 float width = style.CalcSize(new GUIContent(text)).x;
@@ -268,26 +268,31 @@ namespace TRnK.Localization
             return Mathf.Clamp(widest + AutoFitPadding, LocaleColumnMinWidth, AutoFitMaxWidth);
         }
 
-        private static string ValueFor(TableEntry entry, string localeCode)
+        private static string ValueFor(LocalizationTable table, int row, string localeCode)
         {
-            foreach (var lv in entry.Values)
-                if (lv.LocaleCode == localeCode) return lv.Value;
-            return null;
+            int column = table.IndexOfLocale(localeCode);
+            return column >= 0 ? table.GetValue(row, column) : null;
         }
+
+        private LocalizationTable SelectedTable =>
+            _config != null && _selectedTableIndex >= 0 && _selectedTableIndex < _config.Tables.Count
+                ? _config.Tables[_selectedTableIndex]
+                : null;
 
         // Updates the pinned status bar; it is created once, so it never duplicates or scrolls away
         private void UpdateStatus()
         {
             if (_statusLabel == null) return;
 
-            if (_config == null || _selectedTableIndex < 0 || _selectedTableIndex >= _config.Tables.Count)
+            var table = SelectedTable;
+            if (table == null)
             {
                 _statusLabel.text = string.Empty;
                 return;
             }
 
             int shown = _visibleEntryIndices.Count;
-            int total = _config.Tables[_selectedTableIndex].Entries.Count;
+            int total = table.Keys.Count;
 
             _statusLabel.text = shown == total ? $"{total} keys" : $"{shown} of {total} keys";
         }
@@ -334,45 +339,41 @@ namespace TRnK.Localization
         private void BuildVisibleIndices()
         {
             _visibleEntryIndices.Clear();
-            var table = _config.Tables[_selectedTableIndex];
+            var keys = SelectedTable.Keys;
 
-            for (int i = 0; i < table.Entries.Count; i++)
+            for (int i = 0; i < keys.Count; i++)
             {
                 if (string.IsNullOrEmpty(_searchFilter)) { _visibleEntryIndices.Add(i); continue; }
 
-                var entry = table.Entries[i];
-                if (!string.IsNullOrEmpty(entry.Key)
-                    && entry.Key.IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0)
+                if (!string.IsNullOrEmpty(keys[i])
+                    && keys[i].IndexOf(_searchFilter, StringComparison.OrdinalIgnoreCase) >= 0)
                     _visibleEntryIndices.Add(i);
             }
         }
 
-        private TableEntry GetEntry(int row)
+        // Maps a visible grid row to the table's key row, or -1
+        private int TableRow(int gridRow)
         {
-            if (row < 0 || row >= _visibleEntryIndices.Count) return null;
-            var entries = _config.Tables[_selectedTableIndex].Entries;
-            int entryIndex = _visibleEntryIndices[row];
-            return entryIndex < entries.Count ? entries[entryIndex] : null;
+            var table = SelectedTable;
+            if (table == null || gridRow < 0 || gridRow >= _visibleEntryIndices.Count) return -1;
+            int row = _visibleEntryIndices[gridRow];
+            return row < table.Keys.Count ? row : -1;
         }
 
-        private void BindKeyCell(VisualElement cell, int row)
+        private void BindKeyCell(VisualElement cell, int gridRow)
         {
             var label = CellLabel(cell);
-            var entry = GetEntry(row);
-            label.text = entry != null ? entry.Key : string.Empty;
+            int row = TableRow(gridRow);
+            label.text = row >= 0 ? SelectedTable.Keys[row] : string.Empty;
         }
 
-        private void BindValueCell(VisualElement cell, int row, string localeCode)
+        private void BindValueCell(VisualElement cell, int gridRow, string localeCode)
         {
             var label = CellLabel(cell);
-            var entry = GetEntry(row);
-            if (entry == null) { label.text = string.Empty; return; }
+            int row = TableRow(gridRow);
+            if (row < 0) { label.text = string.Empty; return; }
 
-            string value = string.Empty;
-            foreach (var lv in entry.Values)
-            {
-                if (lv.LocaleCode == localeCode) { value = lv.Value ?? string.Empty; break; }
-            }
+            string value = ValueFor(SelectedTable, row, localeCode) ?? string.Empty;
 
             // An em dash makes a gap visible; blank space reads as a narrow column
             bool missing = string.IsNullOrEmpty(value);
