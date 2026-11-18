@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace TRnK.Localization
 {
@@ -26,13 +27,17 @@ namespace TRnK.Localization
         public static void SetLocale(string localeCode)
             => LocalizationService.SetLocale(localeCode);
 
-        /// <summary>Registers a table not listed in the config.</summary>
+        /// <summary>Loads a table from Addressables by name. Completes with false if it could not be loaded.</summary>
+        public static Task<bool> LoadTableAsync(string tableName)
+            => LocalizationService.LoadTableAsync(tableName);
+
+        /// <summary>Unregisters a table and releases it if it was loaded from Addressables.</summary>
+        public static bool ReleaseTable(string tableName)
+            => LocalizationService.ReleaseTable(tableName);
+
+        /// <summary>Registers a table the game references or loaded itself.</summary>
         public static void AddTable(LocalizationTable table)
             => LocalizationService.AddTable(table);
-
-        /// <summary>Unregisters a table by name.</summary>
-        public static bool RemoveTable(string tableName)
-            => LocalizationService.RemoveTable(tableName);
 
         /// <summary>Whether a table is registered.</summary>
         public static bool HasTable(string tableName)

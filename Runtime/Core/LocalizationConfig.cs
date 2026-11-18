@@ -27,14 +27,8 @@ namespace TRnK.Localization
 #endif
         [SerializeField] private List<Locale> _locales = new();
 
-#if ODIN_INSPECTOR
-        [BoxGroup("Tables"), ListDrawerSettings(ShowFoldout = true)]
-#endif
-        [SerializeField] private List<LocalizationTable> _tables = new();
-
         public string DefaultLocale => _defaultLocale;
         public IReadOnlyList<Locale> Locales => _locales;
-        public IReadOnlyList<LocalizationTable> Tables => _tables;
 
         public bool HasLocale(string code)
         {
@@ -43,16 +37,6 @@ namespace TRnK.Localization
                 if (string.Equals(locale.Code, code, StringComparison.Ordinal))
                     return true;
             return false;
-        }
-
-        /// <summary>Finds a listed table by its table name, or null.</summary>
-        internal LocalizationTable FindTable(string tableName)
-        {
-            if (string.IsNullOrEmpty(tableName)) return null;
-            foreach (var table in _tables)
-                if (table != null && string.Equals(table.TableName, tableName, StringComparison.Ordinal))
-                    return table;
-            return null;
         }
 
 #if ODIN_INSPECTOR
@@ -67,7 +51,8 @@ namespace TRnK.Localization
 #if UNITY_EDITOR
         private void OnValidate()
         {
-            if (!string.IsNullOrEmpty(_defaultLocale) && !HasLocale(_defaultLocale))
+            // A new config has no locales until its first import
+            if (_locales.Count > 0 && !string.IsNullOrEmpty(_defaultLocale) && !HasLocale(_defaultLocale))
                 Log.Warn($"DefaultLocale '{_defaultLocale}' is not in the Locales list on '{name}'.");
         }
 #endif

@@ -57,8 +57,7 @@ namespace TRnK.Localization
             if (noKey)
                 return new LocalizedKeyResult(LocalizedKeyState.Missing, "Key is empty.");
 
-            var tableAsset = config.FindTable(table);
-            if (tableAsset == null)
+            if (!TablesByName(config).TryGetValue(table, out var tableAsset))
                 return new LocalizedKeyResult(LocalizedKeyState.Missing, $"Table '{table}' not found in '{config.name}'.");
 
             if (!tableAsset.ContainsKey(key))
@@ -88,7 +87,7 @@ namespace TRnK.Localization
         private static Dictionary<string, LocalizationTable> TablesByName(LocalizationConfig config)
         {
             var tables = new Dictionary<string, LocalizationTable>(StringComparer.Ordinal);
-            foreach (var table in config.Tables)
+            foreach (var table in TableAssets.For(config))
                 if (table != null && !string.IsNullOrEmpty(table.TableName))
                     tables.TryAdd(table.TableName, table);
             return tables;

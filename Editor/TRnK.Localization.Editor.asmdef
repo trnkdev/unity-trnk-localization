@@ -4,7 +4,9 @@
     "references": [
         "GUID:7d1f7616e293e454cb423c98d8a7babb",
         "GUID:22a704979ba6f464ea6e8bb476cdcc2b",
-        "GUID:4a9d13e8dda05384db63b677ccc344f0"
+        "GUID:4a9d13e8dda05384db63b677ccc344f0",
+        "GUID:69448af7b92c7f342b298e06a37122aa",
+        "GUID:9e24947de15b9834991c9d8411ea37cf"
     ],
     "includePlatforms": [
         "Editor"
@@ -15,6 +17,12 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.addressables",
+            "expression": "1.0.0",
+            "define": "TRNK_LOCALIZATION_ADDRESSABLES"
+        }
+    ],
     "noEngineReferences": false
 }

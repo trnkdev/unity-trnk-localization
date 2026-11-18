@@ -29,6 +29,7 @@ namespace TRnK.Localization
         private LocalizationConfig _config;
 
         private ListView _tableList;
+        private IReadOnlyList<LocalizationTable> _tables = new List<LocalizationTable>();
         private readonly List<string> _tableNames = new();
         private int _selectedTableIndex = -1;
 
@@ -132,9 +133,10 @@ namespace TRnK.Localization
         private void RefreshTableList()
         {
             _tableNames.Clear();
+            _tables = TableAssets.For(_config);
             if (_config != null)
             {
-                foreach (var table in _config.Tables)
+                foreach (var table in _tables)
                     _tableNames.Add(table == null ? "(missing asset)"
                         : string.IsNullOrEmpty(table.TableName) ? "(unnamed)" : table.TableName);
             }
@@ -275,8 +277,8 @@ namespace TRnK.Localization
         }
 
         private LocalizationTable SelectedTable =>
-            _config != null && _selectedTableIndex >= 0 && _selectedTableIndex < _config.Tables.Count
-                ? _config.Tables[_selectedTableIndex]
+            _config != null && _selectedTableIndex >= 0 && _selectedTableIndex < _tables.Count
+                ? _tables[_selectedTableIndex]
                 : null;
 
         // Updates the pinned status bar; it is created once, so it never duplicates or scrolls away

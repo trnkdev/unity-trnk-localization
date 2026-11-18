@@ -3,7 +3,9 @@
     "rootNamespace": "TRnK.Localization",
     "references": [
         "GUID:6055be8ebefd69e48b49212b09b47b2f",
-        "GUID:22a704979ba6f464ea6e8bb476cdcc2b"
+        "GUID:22a704979ba6f464ea6e8bb476cdcc2b",
+        "GUID:9e24947de15b9834991c9d8411ea37cf",
+        "GUID:84651a3751eca9349aac36a66bba901b"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -12,6 +14,12 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.addressables",
+            "expression": "1.0.0",
+            "define": "TRNK_LOCALIZATION_ADDRESSABLES"
+        }
+    ],
     "noEngineReferences": false
 }

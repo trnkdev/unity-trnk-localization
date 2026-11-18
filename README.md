@@ -1,6 +1,6 @@
 # TRnK Localization
 
-A lightweight, synchronous, text-first localization package for Unity. `Loc.Get()` is a plain dictionary lookup — no coroutines, no Addressables coupling, no async complexity.
+A lightweight, synchronous, text-first localization package for Unity. `Loc.Get()` is a plain dictionary lookup. The game registers the tables it references, or loads them on demand through Addressables when that package is installed.
 
 ## Installation
 
@@ -39,12 +39,12 @@ Share it as *Anyone with the link → Viewer*, then open
 URL, and hit **Import from Spreadsheet**.
 
 Each tab becomes one `LocalizationTable` asset (`UI.asset`, `Combat.asset`, …),
-created in the **Tables Folder** (the config's folder by default) and listed in
-the config. Importing again updates those assets in place.
+created in the **Tables Folder** (the config's folder by default). Importing
+again updates those assets in place.
 
 **3. Initialize from your game bootstrap**
 
-`Loc.Initialize` takes a `LocalizationConfig` instance — load it however your project loads assets (Resources, Addressables, a direct Inspector reference, …) and pass it in. The tables the config lists come with it, so lookups work as soon as `Initialize` returns.
+`Loc.Initialize` takes a `LocalizationConfig` instance, which holds only settings (locales and the default locale). Load it however your project loads assets and pass it in. Then register the tables your first screen needs.
 
 ```csharp
 using TRnK.Localization;
@@ -53,15 +53,23 @@ using UnityEngine;
 public class GameBootstrap : MonoBehaviour
 {
     [SerializeField] LocalizationConfig _localizationConfig;
+    [SerializeField] LocalizationTable _uiTable; // always loaded
 
     void Awake()
     {
         // A null or unknown saved code falls back to the config's default locale
         var save = SaveSystem.Load();
         Loc.Initialize(_localizationConfig, save.languageCode);
+        Loc.AddTable(_uiTable);
     }
 }
 ```
+
+Tables needed only now and then (a level chunk, a seasonal event) load on demand
+with `await Loc.LoadTableAsync("Event_Halloween")`, which requires Addressables.
+A table you reference directly shouldn't also be Addressable, or the build holds
+it twice: remove it from its Addressables group once, and later imports leave it
+alone.
 
 **4. Use it**
 
@@ -97,10 +105,13 @@ void Show() => _ui.SetText(_tooltip.Get());
 void OnEnable()  => Loc.LocaleChanged += OnLocale;
 void OnDisable() => Loc.LocaleChanged -= OnLocale;
 
-// Tables not listed in the config — register them before showing UI that uses them
-Loc.AddTable(levelTable);
-bool loaded = Loc.HasTable("Level_1_100");
-Loc.RemoveTable("Level_1_100");        // unloading the asset is up to you
+// Load a table before showing UI that uses it, release it after leaving that UI
+bool loaded = await Loc.LoadTableAsync("Level_101_200");
+Loc.ReleaseTable("Level_1_100");
+bool ready = Loc.HasTable("Level_101_200");
+
+// A table the game references directly, or loaded through its own pipeline
+Loc.AddTable(myTable);
 
 // Language switcher
 public void SetLanguage(string code)
@@ -119,9 +130,11 @@ public void SetLanguage(string code)
 2. Fall back to default locale (if different)
 3. Editor: logs a warning and returns `#Table.key` · Player builds: returns `""`
 
-**Initialization:** registers every table the config lists and sets the locale to `initialLocale`, or the config's default when that is null or unknown. Calling it again with the same asset keeps the registered tables (including ones added with `AddTable`) and the current locale, applying `initialLocale` only if one is given; a different asset replaces all registered tables.
+**Initialization:** sets the locale to `initialLocale`, or the config's default when that is null or unknown. It registers no tables, so add them after it. Calling it again with the same asset keeps the registered tables and the current locale, applying `initialLocale` only if one is given; a different asset unregisters every table and releases the ones loaded from Addressables.
 
-**Tables:** `Loc.Get` reads only registered tables — the config's, plus any passed to `AddTable`. A table name that isn't registered logs a warning and goes through the missing-key fallback below. `LocalizedText` reads its text on enable and on locale change only, so add a table before showing UI that uses it, and remove it only after leaving that UI. Each table holds every locale, so `SetLocale` never reloads anything.
+**Tables:** `Loc.Get` reads only registered tables: those passed to `AddTable` or loaded with `LoadTableAsync`. A missing table logs *is not loaded*, then goes through the missing-key fallback above. `LocalizedText` reads its text on enable and on locale change only, so load a table before showing UI that uses it, and release it only after leaving that UI. Each table holds every locale, so `SetLocale` never reloads anything.
+
+**`LoadTableAsync`** completes with `true` once the table is registered, straight away if it already is. Two calls for the same table share one load. It completes with `false` when the table can't be loaded, e.g. a misspelled name or a table that isn't Addressable. Without Addressables it always completes with `false`; use `AddTable`. **`ReleaseTable`** unregisters a table and releases its Addressables handle.
 
 **`SetLocale`** with an unregistered code is ignored (with a warning). Setting the same locale twice doesn't re-fire `LocaleChanged`.
 
@@ -141,23 +154,29 @@ build artifacts: imported from the sheet, never hand-edited.
 | Field | Value |
 |---|---|
 | Spreadsheet URL | any URL of your spreadsheet |
-| Tables Folder | where new table assets are created; empty = the config's folder |
+| Tables Folder | where the table assets live; empty = the config's folder |
 | Ignored Tabs | tabs to skip, e.g. `Rule` |
+
+With Odin Inspector installed, these fields are drawn by Odin.
 
 The whole spreadsheet is downloaded once as `.xlsx` (no API key or OAuth), and
 every tab that isn't ignored becomes a `LocalizationTable` asset of the same
 name. A tab whose first header isn't `Key` is skipped with a warning. Locale
 columns in the header define the config's locales.
 
-Import is **Replace-All**: every table is rewritten from the sheet, so anything
-removed there is removed here. Existing table assets are updated in place,
-wherever you moved them, so references to them survive. A tab that disappears
-from the sheet is dropped from the config, but its asset stays in the project
-(and is reused if the tab comes back). Tables listed by another config are never
-touched, so several configs can share tab names. The Console lists what was
-created and dropped, and Ctrl+Z undoes the whole import.
+Import is **Replace-All**, and the **Tables Folder** mirrors the sheet: every
+table is rewritten from it, existing assets are updated in place so references
+to them survive, and the asset of a tab that disappears from the sheet is moved
+to the trash. Use a separate Tables Folder for each config. The Console lists
+what was created and trashed, and Ctrl+Z undoes the table and config changes.
 
-**Tables tab** shows every table as a key × locale grid with search.
+With Addressables installed, a table the import creates is made Addressable at
+`Localization/<TableName>` in a `Localization` group, which packs each table in
+its own bundle so releasing one frees it. After that its Addressables setup is
+yours: move it to another group or remove it, and later imports leave it alone.
+
+**Tables tab** shows every table in the Tables Folder as a key × locale grid
+with search. The key validator and `LocalizedText` preview read the same tables.
 
 Requires the spreadsheet shared as *Anyone with the link → Viewer*.
 
@@ -233,6 +252,12 @@ Each tab is fetched by name, no API key or OAuth:
 - The whole spreadsheet downloads once as `.xlsx`, so every tab is found automatically and quoted text can't merge rows
 - Removed: tab-name list, diff preview and Apply step, Validation tab, CSV export
 
+### v0.8 — Addressables ✅
+
+- Optional: with Addressables installed, the import makes new tables Addressable; the config holds settings only
+- `Loc.LoadTableAsync` / `Loc.ReleaseTable`; the same game code works without Addressables
+- Editor tools read tables from the Tables Folder, which mirrors the sheet
+
 ### Rename Safety (planned)
 
 Renaming a spreadsheet tab renames its table. Code references break at compile
@@ -249,7 +274,7 @@ be fixed by hand.
 - Full API documentation
 
 ### Explicitly out of scope (by design)
-- Addressables for strings — strings are tiny; per-locale streaming adds complexity for negligible memory savings
+- Per-locale streaming — each table holds every locale; splitting tables by language adds complexity for negligible memory savings
 - ICU plural rules, RTL support, XLIFF, post-ship remote updates — enterprise-scale features; use Unity Localization if you need these
 
 ## Requirements

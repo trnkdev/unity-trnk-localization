@@ -3,9 +3,16 @@ using System.Collections.Generic;
 using TRnK.Toolkit;
 using UnityEngine;
 
+#if ODIN_INSPECTOR
+using Sirenix.OdinInspector;
+#endif
+
 namespace TRnK.Localization
 {
     /// <summary>Project-scoped editor settings for TRnK Localization, stored as an asset in the project.</summary>
+#if ODIN_INSPECTOR
+    [HideMonoScript]
+#endif
     internal sealed class LocalizationEditorSettings : ScriptableObject
     {
         private const string SettingsFolder = "Assets/Plugins/TRnK/Localization/Editor";
@@ -15,13 +22,26 @@ namespace TRnK.Localization
         private static LocalizationEditorSettings s_instance;
         private static LocalizationEditorSettings s_transient;
 
-        [SerializeField] private LocalizationConfig _activeConfig;
+        // Chosen in the Localization Manager's top bar
+        [SerializeField, HideInInspector] private LocalizationConfig _activeConfig;
 
-        [SerializeField] private string _spreadsheetUrl;
+#if ODIN_INSPECTOR
+        [LabelText("Spreadsheet URL")]
+#endif
+        [SerializeField, Tooltip("Any URL of the Google spreadsheet.")]
+        private string _spreadsheetUrl;
 
-        [SerializeField] private List<string> _ignoredTabs = new() { DefaultIgnoredTab };
+#if ODIN_INSPECTOR
+        [LabelText("Tables Folder"), FolderPath]
+#endif
+        [SerializeField, Tooltip("Where the table assets live. Empty uses the config's folder.")]
+        private string _tablesFolder;
 
-        [SerializeField] private string _tablesFolder;
+#if ODIN_INSPECTOR
+        [LabelText("Ignored Sheet Tabs")]
+#endif
+        [SerializeField, Tooltip("Spreadsheet tabs the import skips, e.g. a rules or notes tab.")]
+        private List<string> _ignoredTabs = new() { DefaultIgnoredTab };
 
         /// <summary>Any URL of the Google spreadsheet holding the localization tabs.</summary>
         internal string SpreadsheetUrl

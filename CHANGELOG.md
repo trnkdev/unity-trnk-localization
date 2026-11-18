@@ -1,3 +1,27 @@
+## [0.8.0] - 2026-11-17
+
+### Addressables
+
+Tables can load on demand, the way level chunks and seasonal events need. Addressables stays optional: without it, the game registers the tables it references with `Loc.AddTable`.
+
+**Added**
+
+- `Loc.LoadTableAsync(tableName)`: loads a table from Addressables by name and completes with `true` once it is registered. Two calls for the same table share one load.
+- With Addressables installed, the import makes each table it creates Addressable at `Localization/<TableName>`, in a `Localization` group that packs each table separately. Existing tables keep whatever Addressables setup you gave them, so a table you un-mark stays un-marked.
+- With Odin Inspector installed, the Import tab draws its settings with Odin (list, folder picker) and a large green **Import From Spreadsheet** button. Ignored tabs now come after the Tables Folder.
+
+**Changed**
+
+- `LocalizationConfig` holds settings only: locales and the default locale. `Loc.Initialize` registers no tables; the game adds the ones it references with `Loc.AddTable` and loads the rest with `Loc.LoadTableAsync`.
+- `Loc.RemoveTable` is now `Loc.ReleaseTable`, and also releases the table's Addressables handle.
+- Initializing with a different config releases every table loaded from Addressables.
+- The Tables Folder mirrors the sheet: the import only reuses assets in it, and moves the asset of a dropped tab to the trash. Use a separate Tables Folder for each config.
+- The Tables tab, key validator and `LocalizedText` preview read the tables in the Tables Folder.
+
+**Fixed**
+
+- A new `LocalizationConfig` no longer warns that its default locale is missing before its first import.
+
 ## [0.7.0] - 2026-11-17
 
 ### Simple Importer

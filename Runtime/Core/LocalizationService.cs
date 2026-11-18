@@ -1,19 +1,38 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using TRnK.Logger;
+
+#if TRNK_LOCALIZATION_ADDRESSABLES
+using UnityEngine.AddressableAssets;
+using UnityEngine.ResourceManagement.AsyncOperations;
+#endif
 
 namespace TRnK.Localization
 {
     internal static class LocalizationService
     {
+        private const string AddressPrefix = "Localization/";
+
         internal static bool IsInitialized => s_config != null;
         internal static string CurrentLocale { get; private set; }
         internal static LocalizationConfig Config => s_config;
 
         internal static event Action<string> LocaleChanged;
 
+        private static readonly Task<bool> s_loaded = Task.FromResult(true);
+        private static readonly Task<bool> s_notLoaded = Task.FromResult(false);
+
         private static LocalizationConfig s_config;
         private static readonly Dictionary<string, LocalizationTable> s_tables = new(StringComparer.Ordinal);
+        private static readonly Dictionary<string, Task<bool>> s_pendingLoads = new(StringComparer.Ordinal);
+
+#if TRNK_LOCALIZATION_ADDRESSABLES
+        private static readonly Dictionary<string, AsyncOperationHandle<LocalizationTable>> s_handles = new(StringComparer.Ordinal);
+#endif
+
+        /// <summary>The Addressables address of a table.</summary>
+        internal static string AddressOf(string tableName) => AddressPrefix + tableName;
 
         internal static void Initialize(LocalizationConfig config, string initialLocale)
         {
@@ -26,21 +45,12 @@ namespace TRnK.Localization
             bool sameConfig = s_config == config;
             if (!sameConfig)
             {
+                ReleaseAllHandles();
                 s_config = config;
                 s_tables.Clear();
+                s_pendingLoads.Clear();
 
-                foreach (var table in config.Tables)
-                {
-                    if (table == null)
-                    {
-                        Log.Warn($"LocalizationConfig '{config.name}' has an empty table slot. Import the spreadsheet again.");
-                        continue;
-                    }
-
-                    Register(table);
-                }
-
-                Log.Info($"TRnK.Localization initialized with '{config.name}' ({s_tables.Count} tables).");
+                Log.Info($"TRnK.Localization initialized with '{config.name}'.");
             }
 
             // Same config and no locale: keep the current locale
@@ -96,11 +106,93 @@ namespace TRnK.Localization
             Register(table);
         }
 
-        internal static bool RemoveTable(string tableName)
-            => !string.IsNullOrEmpty(tableName) && s_tables.Remove(tableName);
+        internal static Task<bool> LoadTableAsync(string tableName)
+        {
+            if (!IsInitialized)
+            {
+                Log.Error("Cannot load a table: TRnK.Localization is not initialized. Call Loc.Initialize() first.");
+                return s_notLoaded;
+            }
+
+            if (string.IsNullOrEmpty(tableName))
+            {
+                Log.Error("Cannot load a table: name is null or empty.");
+                return s_notLoaded;
+            }
+
+            if (s_tables.ContainsKey(tableName)) return s_loaded;
+            if (s_pendingLoads.TryGetValue(tableName, out var pending)) return pending;
+
+#if TRNK_LOCALIZATION_ADDRESSABLES
+            var load = LoadAddressableAsync(tableName);
+
+            // A load that completed synchronously already cleaned up after itself
+            if (!load.IsCompleted) s_pendingLoads[tableName] = load;
+            return load;
+#else
+            Log.Warn($"Cannot load table '{tableName}': Addressables is not installed. Reference the table and call Loc.AddTable instead.");
+            return s_notLoaded;
+#endif
+        }
+
+        internal static bool ReleaseTable(string tableName)
+        {
+            if (string.IsNullOrEmpty(tableName)) return false;
+
+            bool removed = s_tables.Remove(tableName);
+#if TRNK_LOCALIZATION_ADDRESSABLES
+            if (s_handles.Remove(tableName, out var handle) && handle.IsValid())
+                Addressables.Release(handle);
+#endif
+            return removed;
+        }
 
         internal static bool HasTable(string tableName)
             => !string.IsNullOrEmpty(tableName) && s_tables.ContainsKey(tableName);
+
+#if TRNK_LOCALIZATION_ADDRESSABLES
+        private static async Task<bool> LoadAddressableAsync(string tableName)
+        {
+            var config = s_config;
+            var handle = Addressables.LoadAssetAsync<LocalizationTable>(AddressOf(tableName));
+
+            try
+            {
+                await handle.Task;
+            }
+            finally
+            {
+                s_pendingLoads.Remove(tableName);
+            }
+
+            // Re-initialized with another config while loading
+            if (s_config != config)
+            {
+                Addressables.Release(handle);
+                return false;
+            }
+
+            if (handle.Status != AsyncOperationStatus.Succeeded || handle.Result == null)
+            {
+                Log.Error($"Could not load table '{tableName}' from Addressables address '{AddressOf(tableName)}'. Check the table name, or import the spreadsheet again.");
+                Addressables.Release(handle);
+                return false;
+            }
+
+            Register(handle.Result);
+            s_handles[tableName] = handle;
+            return true;
+        }
+#endif
+
+        private static void ReleaseAllHandles()
+        {
+#if TRNK_LOCALIZATION_ADDRESSABLES
+            foreach (var handle in s_handles.Values)
+                if (handle.IsValid()) Addressables.Release(handle);
+            s_handles.Clear();
+#endif
+        }
 
         internal static string Get(string tableName, string key)
         {
@@ -149,7 +241,7 @@ namespace TRnK.Localization
 
             if (!tables.TryGetValue(tableName, out var table))
             {
-                Log.Warn($"Table '{tableName}' is not loaded. List it in LocalizationConfig or call Loc.AddTable() first.");
+                Log.Warn($"Table '{tableName}' is not loaded. Call Loc.LoadTableAsync(\"{tableName}\") first.");
                 return MissingKey(tableName, key, locale);
             }
 
@@ -203,6 +295,11 @@ namespace TRnK.Localization
         {
             s_config = null;
             s_tables.Clear();
+            s_pendingLoads.Clear();
+#if TRNK_LOCALIZATION_ADDRESSABLES
+            // Handles from the previous session belong to an Addressables instance that no longer exists
+            s_handles.Clear();
+#endif
             CurrentLocale = null;
             LocaleChanged = null;
             ClearEditorLookup();

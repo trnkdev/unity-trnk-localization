@@ -10,59 +10,57 @@ using UnityEngine;
 
 namespace TRnK.Localization
 {
-    /// <summary>Writes imported spreadsheet data into table assets and lists them in the config.</summary>
+    /// <summary>Writes imported spreadsheet data into the table assets of the Tables Folder.</summary>
     internal static class SheetApply
     {
         private const string UndoName = "Import Localization";
         private const char InvalidFileNameReplacement = '_';
 
-        /// <summary>Rewrites every imported table from the sheet, updating existing assets in place.</summary>
-        internal static void ReplaceAll(LocalizationConfig config, SheetData data, string newTablesFolder)
+        /// <summary>Rewrites every table from the sheet, updating existing assets in place and trashing dropped ones.</summary>
+        internal static void ReplaceAll(LocalizationConfig config, SheetData data, string tablesFolder)
         {
             // One undo step per import, even when several run in a frame
             Undo.IncrementCurrentGroup();
             Undo.SetCurrentGroupName(UndoName);
             int undoGroup = Undo.GetCurrentGroup();
 
-            var existing = FindTableAssets(config);
+            var existing = ByName(TableAssets.InFolder(tablesFolder));
             string[] locales = data.LocaleCodes.ToArray();
-            var tables = new List<LocalizationTable>(data.Tables.Count);
 
             foreach (var (tableName, rows) in data.Tables)
             {
-                existing.TryGetValue(tableName, out var table);
-                tables.Add(WriteTable(table, tableName, locales, rows, newTablesFolder));
-            }
+                bool isNew = !existing.TryGetValue(tableName, out var table);
+                table = WriteTable(table, tableName, locales, rows, tablesFolder);
 
-            foreach (var listed in config.Tables)
-                if (listed != null && !data.Tables.ContainsKey(listed.TableName))
-                    Log.Info($"Table '{listed.TableName}' is no longer in the spreadsheet: removed from the config, its asset is kept.");
+#if TRNK_LOCALIZATION_ADDRESSABLES
+                // Existing tables keep whatever Addressables setup the project gave them
+                if (isNew) TableAddressables.Mark(table);
+#endif
+            }
 
             var so = new SerializedObject(config);
             so.Update();
-
             ApplyLocales(so, data);
-
-            var tablesProp = so.FindProperty("_tables");
-            tablesProp.arraySize = tables.Count;
-            for (int i = 0; i < tables.Count; i++)
-                tablesProp.GetArrayElementAtIndex(i).objectReferenceValue = tables[i];
-
             so.ApplyModifiedProperties();
 
             AssetDatabase.SaveAssets();
             Undo.CollapseUndoOperations(undoGroup);
-        }
 
-        /// <summary>The configured folder for new tables, or the config's own folder.</summary>
-        internal static string ResolveNewTablesFolder(LocalizationConfig config, string configuredFolder)
-        {
-            if (!string.IsNullOrEmpty(configuredFolder)) return configuredFolder;
-            return Path.GetDirectoryName(AssetDatabase.GetAssetPath(config))?.Replace('\\', '/');
+            // The folder mirrors the sheet; a stale table would otherwise still show and could still ship
+            foreach (var (tableName, table) in existing)
+            {
+                if (data.Tables.ContainsKey(tableName)) continue;
+
+                string path = AssetDatabase.GetAssetPath(table);
+                if (AssetDatabase.MoveAssetToTrash(path))
+                    Log.Info($"Table '{tableName}' is no longer in the spreadsheet: moved '{path}' to the trash.");
+            }
+
+            TableAssets.Invalidate();
         }
 
         private static LocalizationTable WriteTable(LocalizationTable table, string tableName, string[] locales,
-                                                    Dictionary<string, Dictionary<string, string>> rows, string newTablesFolder)
+                                                    Dictionary<string, Dictionary<string, string>> rows, string tablesFolder)
         {
             var keys = new string[rows.Count];
             var values = new string[rows.Count * locales.Length];
@@ -88,8 +86,8 @@ namespace TRnK.Localization
             table = ScriptableObject.CreateInstance<LocalizationTable>();
             table.SetData(tableName, (string[])locales.Clone(), keys, values);
 
-            EditorAssetUtils.EnsureFolderPath(newTablesFolder);
-            string path = AssetDatabase.GenerateUniqueAssetPath($"{newTablesFolder}/{SafeFileName(tableName)}.asset");
+            EditorAssetUtils.EnsureFolderPath(tablesFolder);
+            string path = AssetDatabase.GenerateUniqueAssetPath($"{tablesFolder}/{SafeFileName(tableName)}.asset");
             AssetDatabase.CreateAsset(table, path);
             Undo.RegisterCreatedObjectUndo(table, UndoName);
 
@@ -97,23 +95,15 @@ namespace TRnK.Localization
             return table;
         }
 
-        // Config tables first, then unlisted project assets, so a dropped table is reused, not duplicated
-        private static Dictionary<string, LocalizationTable> FindTableAssets(LocalizationConfig config)
+        private static Dictionary<string, LocalizationTable> ByName(IReadOnlyList<LocalizationTable> tables)
         {
             var byName = new Dictionary<string, LocalizationTable>(StringComparer.Ordinal);
 
-            foreach (var table in config.Tables)
-                if (table != null && !string.IsNullOrEmpty(table.TableName))
-                    byName.TryAdd(table.TableName, table);
-
-            var otherConfigsTables = TablesListedByOtherConfigs(config);
-
-            foreach (string guid in AssetDatabase.FindAssets($"t:{nameof(LocalizationTable)}"))
+            foreach (var table in tables)
             {
-                var table = AssetDatabase.LoadAssetAtPath<LocalizationTable>(AssetDatabase.GUIDToAssetPath(guid));
-                if (table == null || string.IsNullOrEmpty(table.TableName) || otherConfigsTables.Contains(table)) continue;
+                if (string.IsNullOrEmpty(table.TableName)) continue;
 
-                if (byName.TryGetValue(table.TableName, out var kept) && kept != table)
+                if (byName.TryGetValue(table.TableName, out var kept))
                 {
                     Log.Warn($"Two assets hold table '{table.TableName}': '{AssetDatabase.GetAssetPath(kept)}' is updated, '{AssetDatabase.GetAssetPath(table)}' is ignored.");
                     continue;
@@ -123,22 +113,6 @@ namespace TRnK.Localization
             }
 
             return byName;
-        }
-
-        private static HashSet<LocalizationTable> TablesListedByOtherConfigs(LocalizationConfig config)
-        {
-            var tables = new HashSet<LocalizationTable>();
-
-            foreach (string guid in AssetDatabase.FindAssets($"t:{nameof(LocalizationConfig)}"))
-            {
-                var other = AssetDatabase.LoadAssetAtPath<LocalizationConfig>(AssetDatabase.GUIDToAssetPath(guid));
-                if (other == null || other == config) continue;
-
-                foreach (var table in other.Tables)
-                    if (table != null) tables.Add(table);
-            }
-
-            return tables;
         }
 
         private static string SafeFileName(string tableName)

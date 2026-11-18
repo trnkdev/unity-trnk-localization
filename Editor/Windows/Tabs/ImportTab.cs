@@ -2,9 +2,15 @@
 using System;
 using System.Collections.Generic;
 using TRnK.Logger;
+using TRnK.Toolkit;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
+
+#if ODIN_INSPECTOR
+using Sirenix.OdinInspector.Editor;
+using Sirenix.Utilities.Editor;
+#endif
 
 namespace TRnK.Localization
 {
@@ -14,13 +20,14 @@ namespace TRnK.Localization
         private const string UrlPlaceholder = "https://docs.google.com/spreadsheets/d/…";
         private const string IgnoredPlaceholder = "Sheet tab name";
         private const string IgnoredTooltip = "Spreadsheet tabs the import skips, e.g. a rules or notes tab.";
-        private const string FolderTooltip =
-            "Where the import creates new table assets. Existing tables are updated wherever they are. Empty uses the config's folder.";
-        private const string FolderPickerTitle = "Folder for New Localization Tables";
+        private const string FolderTooltip = "Where the table assets live. Empty uses the config's folder.";
+        private const string FolderPickerTitle = "Localization Tables Folder";
         private const string SheetHelp =
             "Each tab becomes a table of the same name. Its first row is 'Key' followed by one column per locale code. " +
             "Share the spreadsheet as 'Anyone with the link → Viewer'.";
         private const string FailedTitle = "Import Failed";
+        private const string ImportLabel = "Import From Spreadsheet";
+        private const string ImportingLabel = "Importing…";
         private const float ButtonHeight = 24f;
 
         public string Title => "Import";
@@ -29,6 +36,13 @@ namespace TRnK.Localization
         private readonly VisualElement _body;
         private LocalizationConfig _config;
         private bool _isImporting;
+
+#if ODIN_INSPECTOR
+        // Matches Odin's large button and the green PC's importer uses
+        private const float OdinButtonHeight = 31f;
+        private const float OdinButtonSpacing = 6f;
+        private static readonly Color ImportButtonColor = new(0.4f, 0.8f, 0.4f);
+#endif
 
         internal ImportTab()
         {
@@ -64,17 +78,64 @@ namespace TRnK.Localization
 
             _body.Add(LocalizationStyles.Header("Spreadsheet"));
             _body.Add(new HelpBox(SheetHelp, HelpBoxMessageType.Info));
+
+#if ODIN_INSPECTOR
+            _body.Add(BuildOdinSettings(settings));
+#else
             _body.Add(BuildUrlField(settings));
             _body.Add(BuildFolderRow(settings));
             _body.Add(BuildIgnoredList(settings));
             _body.Add(LocalizationStyles.Divider());
 
-            var importButton = new Button(Import) { text = _isImporting ? "Importing…" : "Import from Spreadsheet" };
+            var importButton = new Button(Import) { text = _isImporting ? ImportingLabel : ImportLabel };
             importButton.style.height = ButtonHeight;
             importButton.SetEnabled(!_isImporting);
             _body.Add(importButton);
+#endif
         }
 
+#if ODIN_INSPECTOR
+        private IMGUIContainer BuildOdinSettings(LocalizationEditorSettings settings)
+        {
+            PropertyTree tree = null;
+
+            var container = new IMGUIContainer(() =>
+            {
+                if (tree == null) return;
+
+                tree.UpdateTree();
+                tree.Draw(false);
+                if (tree.ApplyChanges()) EditorAssetUtils.MarkDirtyAndSave(settings);
+                tree.InvokeDelayedActions();
+
+                GUILayout.Space(OdinButtonSpacing);
+                GUIHelper.PushColor(ImportButtonColor);
+                GUIHelper.PushGUIEnabled(!_isImporting);
+
+                // Deferred: importing rebuilds this tab, which must not happen mid-draw
+                if (GUILayout.Button(_isImporting ? ImportingLabel : ImportLabel, GUILayout.Height(OdinButtonHeight)))
+                    EditorApplication.delayCall += Import;
+
+                GUIHelper.PopGUIEnabled();
+                GUIHelper.PopColor();
+            });
+
+            // The tree lives only while shown, so closing the window or switching tabs disposes it
+            container.RegisterCallback<AttachToPanelEvent>(_ =>
+            {
+                tree = PropertyTree.Create(new SerializedObject(settings));
+                tree.DrawMonoScriptObjectField = false;
+            });
+            container.RegisterCallback<DetachFromPanelEvent>(_ =>
+            {
+                tree?.Dispose();
+                tree = null;
+            });
+
+            container.style.marginTop = 4;
+            return container;
+        }
+#else
         private static TextField BuildUrlField(LocalizationEditorSettings settings)
         {
             var field = new TextField("Spreadsheet URL") { value = settings.SpreadsheetUrl };
@@ -90,7 +151,7 @@ namespace TRnK.Localization
             var row = new VisualElement { style = { flexDirection = FlexDirection.Row, marginTop = 4 } };
 
             var field = new TextField("Tables Folder") { value = settings.TablesFolder, isDelayed = true, tooltip = FolderTooltip };
-            field.textEdition.placeholder = SheetApply.ResolveNewTablesFolder(_config, null);
+            field.textEdition.placeholder = TableAssets.ResolveFolder(_config, null);
             field.textEdition.hidePlaceholderOnFocus = false;
             field.style.flexGrow = 1;
             field.RegisterValueChangedCallback(evt =>
@@ -176,6 +237,7 @@ namespace TRnK.Localization
 
             LocalizationEditorSettings.GetOrCreate().SetIgnoredTabs(cleaned);
         }
+#endif
 
         private async void Import()
         {
@@ -211,7 +273,7 @@ namespace TRnK.Localization
                     return;
                 }
 
-                SheetApply.ReplaceAll(config, data, SheetApply.ResolveNewTablesFolder(config, settings.TablesFolder));
+                SheetApply.ReplaceAll(config, data, TableAssets.ResolveFolder(config, settings.TablesFolder));
                 Log.Info($"Imported {data.Tables.Count} tables and {data.LocaleCodes.Count} locales into '{config.name}'.");
             }
             catch (Exception e)
