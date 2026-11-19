@@ -123,7 +123,7 @@ namespace TRnK.Localization
 
                 tree.UpdateTree();
                 tree.Draw(false);
-                if (tree.ApplyChanges()) settings.Save();
+                if (tree.ApplyChanges()) settings.MarkChanged();
                 tree.InvokeDelayedActions();
 
                 GUILayout.Space(OdinButtonSpacing);

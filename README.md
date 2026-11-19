@@ -211,6 +211,7 @@ Open via `Tools > TRnK > Localization Manager` and pick the config in the top ba
 - Every tab that isn't ignored becomes a table of the same name. A tab whose first header isn't `Key` is skipped with a warning.
 - The language columns define the config's languages.
 - A typed `\n` in a cell becomes a line break.
+- Format number, percent and date cells as plain text, or they import as raw values (`50%` → `0.5`).
 - Importing again updates existing assets in place, so references to them survive. A tab removed from the sheet has its asset moved to the trash. Use a separate Tables Folder per config.
 - Ctrl+Z undoes an import.
 

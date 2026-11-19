@@ -44,9 +44,7 @@ namespace TRnK.Localization
             DrawLanguageSelector();
             EditorGUILayout.Space(2f);
 
-            EditorGUI.BeginChangeCheck();
-            DrawFields();
-            bool edited = EditorGUI.EndChangeCheck();
+            bool edited = DrawFields();
 
             serializedObject.ApplyModifiedProperties();
 
@@ -95,7 +93,8 @@ namespace TRnK.Localization
             RefreshPreview();
         }
 
-        private void DrawFields()
+        // Only field edits clear the verdict; a button click also counts as a GUI change
+        private bool DrawFields()
         {
             bool noConfig = LocalizationEditorSettings.GetOrCreate().ActiveConfig == null;
 
@@ -122,18 +121,25 @@ namespace TRnK.Localization
                 DrawRoundedBox(Inflate(area), background, border);
 
             GUILayout.Space(RowPadding);
+            EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(_tableProp, new GUIContent("Table"));
-            DrawKeyRow();
+            bool tableEdited = EditorGUI.EndChangeCheck();
+            bool keyEdited = DrawKeyRow();
             GUILayout.Space(RowPadding);
 
             EditorGUILayout.EndVertical();
+            return tableEdited || keyEdited;
         }
 
-        private void DrawKeyRow()
+        private bool DrawKeyRow()
         {
+            bool keyEdited;
+
             using (new EditorGUILayout.HorizontalScope())
             {
+                EditorGUI.BeginChangeCheck();
                 EditorGUILayout.PropertyField(_keyProp, new GUIContent("Key"));
+                keyEdited = EditorGUI.EndChangeCheck();
 
                 // Multi-edit verdicts would be ambiguous across differing values
                 using (new EditorGUI.DisabledScope(serializedObject.isEditingMultipleObjects))
@@ -142,6 +148,8 @@ namespace TRnK.Localization
                         Validate();
                 }
             }
+
+            return keyEdited;
         }
 
         private void DrawMessage()

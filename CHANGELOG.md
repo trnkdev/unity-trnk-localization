@@ -7,7 +7,10 @@
 - Tables tab: text shows as typed, so rich-text tags can be checked against the sheet.
 - Tables tab: double-click fit-to-content now measures with the same font as the cells, and works on every grid.
 - Tables tab: key column text is readable on the light editor skin.
+- The editor settings asset is read-only in the Inspector; edit it in the Localization Manager.
+- Fixed typing in the Localization Manager saving every changed asset in the project on each keystroke; settings now save when the window loses focus or closes.
 - Fixed selecting a `LocalizedText` marking its scene or prefab as changed.
+- Fixed **Validate Key** on `LocalizedText` clearing its own result as soon as it was shown.
 - Fixed the Localization Manager reading or saving a temporary copy of its settings right after a script reload, which could lose the selected config or edits.
 - The status bar updates after an import.
 

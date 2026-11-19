@@ -11,9 +11,6 @@ using Sirenix.OdinInspector;
 namespace TRnK.Localization
 {
     /// <summary>Project-scoped editor settings for TRnK Localization, stored as an asset in the project.</summary>
-#if ODIN_INSPECTOR
-    [HideMonoScript]
-#endif
     internal sealed class LocalizationEditorSettings : ScriptableObject
     {
         private const string SettingsFolder = "Assets/Plugins/TRnK/Localization/Editor";
@@ -52,7 +49,7 @@ namespace TRnK.Localization
             {
                 if (_spreadsheetUrl == value) return;
                 _spreadsheetUrl = value;
-                Save();
+                MarkChanged();
             }
         }
 
@@ -63,7 +60,7 @@ namespace TRnK.Localization
         {
             _ignoredTabs.Clear();
             _ignoredTabs.AddRange(names);
-            Save();
+            MarkChanged();
         }
 
         /// <summary>Folder for new table assets. Empty means the config's folder.</summary>
@@ -74,7 +71,7 @@ namespace TRnK.Localization
             {
                 if (_tablesFolder == value) return;
                 _tablesFolder = value;
-                Save();
+                MarkChanged();
             }
         }
 
@@ -86,17 +83,23 @@ namespace TRnK.Localization
             {
                 if (_activeConfig == value) return;
                 _activeConfig = value;
-                Save();
+                MarkChanged();
             }
         }
 
         /// <summary>False for the unsaved stand-in handed out while the settings asset is still importing.</summary>
         internal bool IsLoaded => EditorUtility.IsPersistent(this);
 
-        /// <summary>Saves the settings asset; the unsaved stand-in is never saved.</summary>
+        /// <summary>Marks the settings changed in memory; <see cref="Save"/> writes them to disk.</summary>
+        internal void MarkChanged()
+        {
+            if (IsLoaded) EditorUtility.SetDirty(this);
+        }
+
+        /// <summary>Writes only this asset, if changed; the unsaved stand-in is never saved.</summary>
         internal void Save()
         {
-            if (IsLoaded) EditorAssetUtils.MarkDirtyAndSave(this);
+            if (IsLoaded) AssetDatabase.SaveAssetIfDirty(this);
         }
 
         internal static LocalizationEditorSettings GetOrCreate() =>

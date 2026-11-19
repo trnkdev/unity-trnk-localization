@@ -49,6 +49,11 @@ namespace TRnK.Localization
 
         private void OnDisable() => EditorApplication.projectChanged -= UpdateStatus;
 
+        // Edits only mark the settings changed; writing on every keystroke lags the editor
+        private void OnLostFocus() => LocalizationEditorSettings.GetOrCreate().Save();
+
+        private void OnDestroy() => LocalizationEditorSettings.GetOrCreate().Save();
+
         // Waits until CreateGUI has built the tabs and the saved config is applied
         private void SelectPendingTable()
         {
