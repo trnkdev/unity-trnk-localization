@@ -1,136 +1,82 @@
+## [0.9.0] - 2026-11-19
+
+### Lookups
+
+- Add `Loc.Get(table, key, arg0 … arg7)` and matching `SetLocalizedText` string overloads with positional `{0}`–`{7}` placeholders.
+- Add `Loc.TryGet` for lookups that never log or return a missing marker.
+- Table names, keys and language codes now ignore case. Addressables addresses are lowercase; importing again updates existing tables.
+- A typed `\n` in a sheet cell becomes a line break on import.
+- Fixed one `LocaleChanged` listener that throws stopping every listener after it.
+- Listeners whose object was destroyed without unsubscribing are removed with a warning.
+- The first `Loc.Initialize` no longer raises `LocaleChanged`.
+- **Breaking:** named placeholders and `LocArg` are removed. Rewrite `{name}` as `{0}` in the sheet and pass values in order.
+
 ## [0.8.0] - 2026-11-17
 
 ### Addressables
 
-Tables can load on demand, the way level chunks and seasonal events need. Addressables stays optional: without it, the game registers the tables it references with `Loc.AddTable`.
-
-**Added**
-
-- `Loc.LoadTableAsync(tableName)`: loads a table from Addressables by name and completes with `true` once it is registered. Two calls for the same table share one load.
-- With Addressables installed, the import makes each table it creates Addressable at `Localization/<TableName>`, in a `Localization` group that packs each table separately. Existing tables keep whatever Addressables setup you gave them, so a table you un-mark stays un-marked.
-- With Odin Inspector installed, the Import tab draws its settings with Odin (list, folder picker) and a large green **Import From Spreadsheet** button. Ignored tabs now come after the Tables Folder.
-
-**Changed**
-
-- `LocalizationConfig` holds settings only: locales and the default locale. `Loc.Initialize` registers no tables; the game adds the ones it references with `Loc.AddTable` and loads the rest with `Loc.LoadTableAsync`.
-- `Loc.RemoveTable` is now `Loc.ReleaseTable`, and also releases the table's Addressables handle.
-- Initializing with a different config releases every table loaded from Addressables.
-- The Tables Folder mirrors the sheet: the import only reuses assets in it, and moves the asset of a dropped tab to the trash. Use a separate Tables Folder for each config.
-- The Tables tab, key validator and `LocalizedText` preview read the tables in the Tables Folder.
-
-**Fixed**
-
-- A new `LocalizationConfig` no longer warns that its default locale is missing before its first import.
+- Add `Loc.LoadTableAsync` to load tables on demand through Addressables (optional dependency).
+- The import makes each new table Addressable in a `Localization` group, one bundle per table, and leaves existing tables' Addressables setup alone.
+- `LocalizationConfig` holds settings only; the game registers tables with `Loc.AddTable` or `Loc.LoadTableAsync`.
+- Rename `Loc.RemoveTable` to `Loc.ReleaseTable`, which also releases the Addressables handle.
+- The Tables Folder mirrors the sheet: a tab removed from the sheet has its asset moved to the trash.
+- The Import tab uses Odin Inspector when installed.
+- Fixed a new `LocalizationConfig` warning about its default locale before its first import.
 
 ## [0.7.0] - 2026-11-17
 
 ### Simple Importer
 
-The Localization Manager is cut down to what the workflow needs: import the spreadsheet, then view the tables.
-
-**Added**
-
-- **Import** tab: Spreadsheet URL, Tables Folder and Ignored Tabs (defaults to `Rule`), then one button. The whole spreadsheet downloads once as `.xlsx` and every tab that isn't ignored is imported; there is no tab list to maintain.
-- A tab whose first header isn't `Key` is skipped with a warning, so notes or rules tabs never become tables.
-- The Console lists created tables and tables dropped from the config.
-
-**Changed**
-
-- Reading `.xlsx` instead of per-tab CSV: cells with quotes or line breaks can no longer merge rows, and Japanese furigana is not glued onto the text.
-- Importing writes straight away. One Undo still reverts one import.
-
-**Removed**
-
-- Sync tab with its tab-name list, diff preview and Apply step.
-- Validation tab and CSV export.
+- Replace the Sync tab with an **Import** tab: Spreadsheet URL, Tables Folder, Ignored Tabs and one button.
+- Download the whole spreadsheet as `.xlsx`, so cells with quotes or line breaks import correctly and every tab is found automatically.
+- Skip tabs whose first header isn't `Key`.
+- Remove the diff preview, Validation tab and CSV export.
 
 ## [0.6.1] - 2026-11-17
 
 ### Sync Isolation
 
-**Fixed**
-
-- Sync could overwrite a table asset listed by another config when both had a tab of the same name. It now skips tables other configs list, so several configs can share tab names.
+- Fixed sync overwriting a table that belongs to another config with the same tab name.
 
 ## [0.6.0] - 2026-11-16
 
 ### Per-Table Storage
 
-Each spreadsheet tab is now its own flat `LocalizationTable` asset instead of nested lists inside the config. Unity deserializes it straight into arrays, so loading needs no parse step and a lookup is one dictionary hit plus an array index. Measured on a 2,826-key x 9-locale table (IL2CPP, desktop): about 4x faster to load and 8x less garbage than a JSON table, and 2x faster than the old nested layout.
-
-**Added**
-
-- `LocalizationTable` asset: table name plus `keys`, `locales` and row-major `values` arrays. Its key index is built on first lookup.
-- `Loc.AddTable`, `Loc.RemoveTable` and `Loc.HasTable`, for tables the game registers itself. Add a table before showing UI that uses it.
-- `Loc.Initialize(config, initialLocale)`: applies a saved language in the same call. A null or unknown code falls back to the default locale.
-- **Tables Folder** on the Sync tab: where new table assets are created (defaults to the config's folder).
-
-**Changed**
-
-- `LocalizationConfig` lists table asset references instead of holding the data.
-- Sync writes table assets: existing ones are updated in place, wherever they live, so their GUID and references survive; new tabs create new assets. One Undo reverts one sync.
-- A tab that disappears from the sheet is dropped from the config, shown in the preview first, and its asset is kept on disk and reused if the tab returns.
-- Tables, Validation, export and key validation read from the table assets.
-
-**Removed**
-
-- `TableEntry` and `LocaleValue`. Configs synced with 0.5 must be synced again.
+- Store each spreadsheet tab as its own `LocalizationTable` asset; loading is about 4x faster than JSON.
+- Add `Loc.AddTable`, `Loc.RemoveTable` and `Loc.HasTable`.
+- `Loc.Initialize(config, initialLocale)` applies a saved language in the same call.
+- **Breaking:** remove `TableEntry` and `LocaleValue`; import the spreadsheet again.
 
 ## [0.4.0] - 2026-07-26
 
 ### Single Source of Truth
 
-The spreadsheet is now the only place translations are authored. The config asset is a build artifact: synced from the sheet, never hand-edited.
-
-**Added**
-
-- **Google Sheets sync** — paste the spreadsheet URL once and list the tab names; each tab is fetched as CSV by name (`gviz` endpoint, no API key or OAuth) and becomes a table of the same name.
-- Non-blocking fetch via `EditorApplication.update` polling — the editor never freezes; 20s timeout and cancel through Unity's background `Progress` bar.
-- All-or-nothing sync: if any tab fails to fetch or parse, nothing reaches the preview — a partial fetch under Replace-All would read as "that table was deleted".
-- Named failures: tab not found, no network, empty response, and the not-link-shared case (Google returns an HTML login page instead of CSV).
-- Locales are defined by the spreadsheet header — sync registers them, names them from `CultureInfo` (`en` → English), and sets the default locale when unset.
-- **Per-component language preview** — a **Selected Language** dropdown on `LocalizedText` rewrites its TMP text in the chosen language, so each component previews independently in the Scene view. Editor-only; never read at runtime.
-
-**Changed**
-
-- Window reduced to three tabs: **Sync**, **Tables** (read-only browser with search), **Validation** (now reporting spreadsheet defects to fix upstream).
-- Import is always Replace-All — with one writer there is nothing to reconcile.
-- Window styling shares the `LocalizedText` inspector palette; hints use Unity's own secondary-text styling.
-- `Validate Key` refreshes the TMP text in the component's selected language rather than always the default.
-
-**Removed**
-
-- Inline table/key editing, locale list editing, Merge-vs-Replace import modes, and manual CSV import — each was a second writer competing with the spreadsheet.
-- The global Edit-Mode preview dropdown from the Manager toolbar — replaced by the per-component selector above, which is scoped to what you are looking at and holds no global state.
-- Export remains, for seeding a new spreadsheet or keeping a text backup.
+- Add Google Sheets sync by URL and tab name, with no API key or OAuth.
+- Locales come from the spreadsheet header.
+- Add a **Selected Language** preview dropdown to `LocalizedText`.
+- Remove inline editing, locale editing and manual CSV import; the spreadsheet is the only place to author text.
 
 ## [0.3.0] - 2026-07-26
 
 ### Developer Workflow
 
-- **Smart strings** — `Loc.Get("table", "key", ("name", value), ...)` with named placeholders `{name}`, supporting string/long/double/bool arguments; unknown placeholders stay literal (editor warns).
-- **Zero-allocation hot path** — `tmpText.SetLocalizedText(table, key, arg0…arg2)` using TMP's `SetText(format, args)` for per-frame counters (HP bars, scores) without GC allocation.
-- **Live key validation** — `LocalizedString` fields tint green (key exists) or red (missing) in the inspector; editing to a valid key auto-refreshes the `LocalizedText`'s TMP text. Odin's own palette when Odin is installed.
-- **Project-scoped editor settings** — Localization Manager remembers the active config and settings as a project asset, no machine-global `EditorPrefs`.
+- Add named placeholders to `Loc.Get`.
+- Add zero-allocation `SetLocalizedText` overloads using TMP's formatter.
+- Add live key validation on `LocalizedString` fields.
+- Store editor settings as a project asset.
 
 ## [0.2.0] - 2026-07-22
 
 ### Authoring Workflow
 
-- UI Toolkit editor window (`Tools > TRnK > Localization Manager`) with Tables, Locales, Import/Export, and Validation tabs.
-- Tables tab: spreadsheet grid (`MultiColumnListView`), inline editing, add/remove keys & tables, search.
-- Locales tab: manage locales, set default-locale, Sync Entries.
-- Import/Export tab: CSV export (Excel-compatible, BOM); CSV import with diff preview, Merge/Replace modes, undo support.
-- Validation tab: per-locale coverage bars, missing translations, duplicate keys, empty names.
-- Robust CSV pipeline: BOM, quoted/multi-line fields, escaped quotes, comma/semicolon auto-detection.
+- Add the Localization Manager window with Tables, Locales, Import/Export and Validation tabs.
+- Add CSV import and export.
 
 ## [0.1.0] - 2026-07-22
 
 ### Runtime Foundation
 
-- Single-asset data model (`LocalizationConfig` holds all locales/tables/keys).
-- Synchronous `Loc` facade: `Initialize`, `Get`, `SetLocale`, `LocaleChanged`, `IsReady`.
-- Current-locale → default-locale fallback; empty values treated as missing.
-- `LocalizedString` serializable reference and `LocalizedText` TMP component.
-- `SetLocalizedText` TMP extensions (one-shot text assignment).
-- Odin/non-Odin dual support (`SerializedScriptableObject` when Odin present, vanilla `ScriptableObject` otherwise).
+- `Loc` facade: `Initialize`, `Get`, `SetLocale`, `LocaleChanged`, `IsReady`.
+- Fallback from the current to the default locale.
+- `LocalizedString`, `LocalizedText` and `SetLocalizedText` TMP extensions.
+- Odin Inspector support.

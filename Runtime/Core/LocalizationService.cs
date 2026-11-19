@@ -24,15 +24,16 @@ namespace TRnK.Localization
         private static readonly Task<bool> s_notLoaded = Task.FromResult(false);
 
         private static LocalizationConfig s_config;
-        private static readonly Dictionary<string, LocalizationTable> s_tables = new(StringComparer.Ordinal);
-        private static readonly Dictionary<string, Task<bool>> s_pendingLoads = new(StringComparer.Ordinal);
+        // Table names ignore case, as do keys and locale codes
+        private static readonly Dictionary<string, LocalizationTable> s_tables = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, Task<bool>> s_pendingLoads = new(StringComparer.OrdinalIgnoreCase);
 
 #if TRNK_LOCALIZATION_ADDRESSABLES
-        private static readonly Dictionary<string, AsyncOperationHandle<LocalizationTable>> s_handles = new(StringComparer.Ordinal);
+        private static readonly Dictionary<string, AsyncOperationHandle<LocalizationTable>> s_handles = new(StringComparer.OrdinalIgnoreCase);
 #endif
 
-        /// <summary>The Addressables address of a table.</summary>
-        internal static string AddressOf(string tableName) => AddressPrefix + tableName;
+        /// <summary>The Addressables address of a table, lowercase because addresses are case-sensitive.</summary>
+        internal static string AddressOf(string tableName) => AddressPrefix + tableName.ToLowerInvariant();
 
         internal static void Initialize(LocalizationConfig config, string initialLocale)
         {
@@ -59,8 +60,9 @@ namespace TRnK.Localization
             string previousLocale = CurrentLocale;
             CurrentLocale = ResolveLocale(config, initialLocale);
 
-            if (!string.Equals(previousLocale, CurrentLocale, StringComparison.Ordinal))
-                LocaleChanged?.Invoke(CurrentLocale);
+            // The first Initialize only sets the starting locale; no table is registered yet to refresh from
+            if (previousLocale != null && !string.Equals(previousLocale, CurrentLocale, StringComparison.Ordinal))
+                NotifyLocaleChanged();
         }
 
         internal static void SetLocale(string localeCode)
@@ -77,16 +79,47 @@ namespace TRnK.Localization
                 return;
             }
 
-            if (string.Equals(CurrentLocale, localeCode, StringComparison.Ordinal)) return;
-
-            if (!s_config.HasLocale(localeCode))
+            string code = s_config.FindLocaleCode(localeCode);
+            if (code == null)
             {
                 Log.Warn($"Locale '{localeCode}' is not registered in LocalizationConfig. Ignoring.");
                 return;
             }
 
-            CurrentLocale = localeCode;
-            LocaleChanged?.Invoke(CurrentLocale);
+            if (string.Equals(CurrentLocale, code, StringComparison.Ordinal)) return;
+
+            CurrentLocale = code;
+            NotifyLocaleChanged();
+        }
+
+        private static void NotifyLocaleChanged()
+        {
+            var listeners = LocaleChanged;
+            if (listeners == null) return;
+
+            // Each listener runs on its own, so one that throws can't leave the rest on the old locale
+            foreach (var listener in listeners.GetInvocationList())
+            {
+                var handler = (Action<string>)listener;
+                var owner = handler.Target as UnityEngine.Object;
+
+                // A destroyed object that never unsubscribed would throw on every change
+                if (handler.Target is UnityEngine.Object && owner == null)
+                {
+                    LocaleChanged -= handler;
+                    Log.Warn($"Removed LocaleChanged listener '{handler.Method.DeclaringType?.Name}.{handler.Method.Name}': its object was destroyed without unsubscribing.");
+                    continue;
+                }
+
+                try
+                {
+                    handler(CurrentLocale);
+                }
+                catch (Exception e)
+                {
+                    Log.Exception(e, owner);
+                }
+            }
         }
 
         internal static void AddTable(LocalizationTable table)
@@ -210,6 +243,21 @@ namespace TRnK.Localization
             return Lookup(s_tables, CurrentLocale, s_config.DefaultLocale, tableName, key);
         }
 
+        internal static bool TryGet(string tableName, string key, out string value)
+        {
+            value = null;
+            if (string.IsNullOrEmpty(tableName) || string.IsNullOrEmpty(key)) return false;
+
+#if UNITY_EDITOR
+            if (!UnityEngine.Application.isPlaying && s_editorTables != null)
+                return s_editorTables.TryGetValue(tableName, out var editorTable)
+                       && TryGetValue(editorTable, key, s_editorLocale, s_editorDefaultLocale, out value);
+#endif
+            return IsInitialized
+                   && s_tables.TryGetValue(tableName, out var table)
+                   && TryGetValue(table, key, CurrentLocale, s_config.DefaultLocale, out value);
+        }
+
         private static void Register(LocalizationTable table)
         {
             if (string.IsNullOrEmpty(table.TableName))
@@ -227,7 +275,9 @@ namespace TRnK.Localization
         private static string ResolveLocale(LocalizationConfig config, string requested)
         {
             if (string.IsNullOrEmpty(requested)) return config.DefaultLocale;
-            if (config.HasLocale(requested)) return requested;
+
+            string code = config.FindLocaleCode(requested);
+            if (code != null) return code;
 
             Log.Warn($"Locale '{requested}' is not registered in LocalizationConfig. Using default '{config.DefaultLocale}'.");
             return config.DefaultLocale;
@@ -241,21 +291,26 @@ namespace TRnK.Localization
 
             if (!tables.TryGetValue(tableName, out var table))
             {
-                Log.Warn($"Table '{tableName}' is not loaded. Call Loc.LoadTableAsync(\"{tableName}\") first.");
+                Log.Warn($"Table '{tableName}' is not loaded. Add it with Loc.AddTable or load it with Loc.LoadTableAsync first.");
                 return MissingKey(tableName, key, locale);
             }
 
-            // 1. Requested locale (treats empty value as missing)
-            if (table.TryGetValue(key, locale, out string value) && !string.IsNullOrEmpty(value))
-                return value;
+            return TryGetValue(table, key, locale, defaultLocale, out string value) ? value : MissingKey(tableName, key, locale);
+        }
 
-            // 2. Default locale fallback (only if different)
-            if (!string.Equals(locale, defaultLocale, StringComparison.Ordinal)
+        // Current locale, then the default locale; an empty cell counts as missing
+        private static bool TryGetValue(LocalizationTable table, string key, string locale, string defaultLocale, out string value)
+        {
+            if (table.TryGetValue(key, locale, out value) && !string.IsNullOrEmpty(value))
+                return true;
+
+            if (!string.Equals(locale, defaultLocale, StringComparison.OrdinalIgnoreCase)
                 && table.TryGetValue(key, defaultLocale, out value)
                 && !string.IsNullOrEmpty(value))
-                return value;
+                return true;
 
-            return MissingKey(tableName, key, locale);
+            value = null;
+            return false;
         }
 
         private static string MissingKey(string tableName, string key, string locale)

@@ -30,13 +30,16 @@ namespace TRnK.Localization
         public string DefaultLocale => _defaultLocale;
         public IReadOnlyList<Locale> Locales => _locales;
 
-        public bool HasLocale(string code)
+        public bool HasLocale(string code) => FindLocaleCode(code) != null;
+
+        /// <summary>The config's spelling of a locale code matched ignoring case, or null.</summary>
+        internal string FindLocaleCode(string code)
         {
-            if (string.IsNullOrEmpty(code)) return false;
+            if (string.IsNullOrEmpty(code)) return null;
             foreach (var locale in _locales)
-                if (string.Equals(locale.Code, code, StringComparison.Ordinal))
-                    return true;
-            return false;
+                if (string.Equals(locale.Code, code, StringComparison.OrdinalIgnoreCase))
+                    return locale.Code;
+            return null;
         }
 
 #if ODIN_INSPECTOR

@@ -35,6 +35,7 @@ namespace TRnK.Localization
 #if TRNK_LOCALIZATION_ADDRESSABLES
                 // Existing tables keep whatever Addressables setup the project gave them
                 if (isNew) TableAddressables.Mark(table);
+                else TableAddressables.UpdateAddress(table);
 #endif
             }
 
@@ -97,7 +98,7 @@ namespace TRnK.Localization
 
         private static Dictionary<string, LocalizationTable> ByName(IReadOnlyList<LocalizationTable> tables)
         {
-            var byName = new Dictionary<string, LocalizationTable>(StringComparer.Ordinal);
+            var byName = new Dictionary<string, LocalizationTable>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var table in tables)
             {

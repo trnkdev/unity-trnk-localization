@@ -74,9 +74,7 @@ namespace TRnK.Localization
             var config = LocalizationEditorSettings.GetOrCreate().ActiveConfig;
             if (config == null) return;
 
-            string locale = !string.IsNullOrEmpty(localeCode) && config.HasLocale(localeCode)
-                ? localeCode
-                : config.DefaultLocale;
+            string locale = config.FindLocaleCode(localeCode) ?? config.DefaultLocale;
 
             // Loc is not initialized in Edit Mode
             LocalizationService.SetEditorLookup(TablesByName(config), locale, config.DefaultLocale);
@@ -86,7 +84,7 @@ namespace TRnK.Localization
 
         private static Dictionary<string, LocalizationTable> TablesByName(LocalizationConfig config)
         {
-            var tables = new Dictionary<string, LocalizationTable>(StringComparer.Ordinal);
+            var tables = new Dictionary<string, LocalizationTable>(StringComparer.OrdinalIgnoreCase);
             foreach (var table in TableAssets.For(config))
                 if (table != null && !string.IsNullOrEmpty(table.TableName))
                     tables.TryAdd(table.TableName, table);

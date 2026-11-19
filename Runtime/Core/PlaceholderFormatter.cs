@@ -1,22 +1,24 @@
+using System;
 using System.Text;
 using TRnK.Logger;
 
 namespace TRnK.Localization
 {
-    /// <summary>Replaces named {placeholder} tokens in a localized string with argument values.</summary>
+    /// <summary>Replaces positional {0}–{7} placeholders in a localized string with argument values.</summary>
     internal static class PlaceholderFormatter
     {
         private const int InitialCapacity = 128;
+        private const char FirstIndex = '0';
+        private const char LastIndex = (char)(FirstIndex + LocArgs.MaxCount - 1);
+
+        private static readonly char[] Braces = { '{', '}' };
 
         // Per-thread: a shared builder would interleave output if a job thread ever formats
-        [System.ThreadStatic] private static StringBuilder t_builder;
+        [ThreadStatic] private static StringBuilder t_builder;
 
-        internal static string Format(string format, LocArg[] args)
+        internal static string Format(string format, in LocArgs args)
         {
-            if (string.IsNullOrEmpty(format) || args == null || args.Length == 0)
-                return format;
-
-            if (format.IndexOf('{') < 0)
+            if (string.IsNullOrEmpty(format) || format.IndexOfAny(Braces) < 0)
                 return format;
 
             var sb = t_builder ??= new StringBuilder(InitialCapacity);
@@ -25,83 +27,41 @@ namespace TRnK.Localization
             for (int i = 0; i < format.Length; i++)
             {
                 char c = format[i];
+                bool hasNext = i + 1 < format.Length;
 
-                if (c == '{')
-                {
-                    // {{ escapes a literal brace
-                    if (i + 1 < format.Length && format[i + 1] == '{')
-                    {
-                        sb.Append('{');
-                        i++;
-                        continue;
-                    }
-
-                    int close = format.IndexOf('}', i + 1);
-                    if (close < 0)
-                    {
-                        // Unclosed brace stays literal
-                        sb.Append(c);
-                        continue;
-                    }
-
-                    if (TryGetValue(args, format, i + 1, close, out string value))
-                    {
-                        sb.Append(value);
-                        i = close;
-                        continue;
-                    }
-
-#if UNITY_EDITOR
-                    Log.Warn($"Unknown placeholder '{format.Substring(i, close - i + 1)}' in localized string.");
-#endif
-                    // Unknown placeholder stays literal; the loop appends its remaining characters
-                    sb.Append(c);
-                }
-                else if (c == '}')
-                {
-                    // }} escapes a literal brace
-                    if (i + 1 < format.Length && format[i + 1] == '}')
-                        i++;
-                    sb.Append('}');
-                }
-                else
+                // {{ and }} escape literal braces
+                if ((c == '{' || c == '}') && hasNext && format[i + 1] == c)
                 {
                     sb.Append(c);
+                    i++;
+                    continue;
                 }
+
+                if (c == '{' && i + 2 < format.Length && format[i + 2] == '}'
+                    && format[i + 1] >= FirstIndex && format[i + 1] <= LastIndex)
+                {
+                    AppendArg(sb, format, format[i + 1] - FirstIndex, args);
+                    i += 2;
+                    continue;
+                }
+
+                // Any other brace stays literal
+                sb.Append(c);
             }
 
             return sb.ToString();
         }
 
-        // Matches arg names against format[start..end) without allocating a substring.
-        private static bool TryGetValue(LocArg[] args, string format, int start, int end, out string value)
+        private static void AppendArg(StringBuilder sb, string format, int index, in LocArgs args)
         {
-            int length = end - start;
-
-            foreach (var arg in args)
+            if (index < args.Count)
             {
-                string name = arg.Name;
-                if (name == null || name.Length != length) continue;
-
-                bool match = true;
-                for (int i = 0; i < length; i++)
-                {
-                    if (name[i] != format[start + i])
-                    {
-                        match = false;
-                        break;
-                    }
-                }
-
-                if (match)
-                {
-                    value = arg.Value;
-                    return true;
-                }
+                sb.Append(args[index]);
+                return;
             }
 
-            value = null;
-            return false;
+            Log.Warn($"Placeholder {{{index}}} has no argument ({args.Count} given) in \"{format}\".");
+            sb.Append('{').Append(index).Append('}');
         }
     }
 }

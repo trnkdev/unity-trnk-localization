@@ -1,4 +1,5 @@
 #if UNITY_EDITOR && TRNK_LOCALIZATION_ADDRESSABLES
+using System;
 using TRnK.Logger;
 using UnityEditor;
 using UnityEditor.AddressableAssets;
@@ -22,10 +23,24 @@ namespace TRnK.Localization
                 Log.Info("Created Addressables settings for the localization tables.");
             }
 
-            string guid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(table));
-            var entry = settings.CreateOrMoveEntry(guid, FindOrCreateGroup(settings));
+            var entry = settings.CreateOrMoveEntry(GuidOf(table), FindOrCreateGroup(settings));
             entry.address = LocalizationService.AddressOf(table.TableName);
         }
+
+        /// <summary>Lowercases an existing table's address if it still uses ours in another case; any other address is left alone.</summary>
+        internal static void UpdateAddress(LocalizationTable table)
+        {
+            var settings = AddressableAssetSettingsDefaultObject.Settings;
+            var entry = settings != null ? settings.FindAssetEntry(GuidOf(table)) : null;
+            if (entry == null) return;
+
+            string address = LocalizationService.AddressOf(table.TableName);
+            if (entry.address != address && string.Equals(entry.address, address, StringComparison.OrdinalIgnoreCase))
+                entry.address = address;
+        }
+
+        private static string GuidOf(LocalizationTable table)
+            => AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(table));
 
         private static AddressableAssetGroup FindOrCreateGroup(AddressableAssetSettings settings)
         {

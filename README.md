@@ -1,6 +1,6 @@
 # TRnK Localization
 
-A lightweight, synchronous, text-first localization package for Unity. `Loc.Get()` is a plain dictionary lookup. The game registers the tables it references, or loads them on demand through Addressables when that package is installed.
+Lightweight, text-first localization for Unity. Translations live in a Google Sheet, import into table assets with one button, and are read with a plain synchronous `Loc.Get`.
 
 ## Installation
 
@@ -18,33 +18,41 @@ https://github.com/trnkdev/unity-trnk-toolkit.git
 https://github.com/trnkdev/unity-trnk-localization.git
 ```
 
+**Optional:** install **Addressables** (`com.unity.addressables`) to load tables on demand. The package detects it automatically.
+
+## Features
+
+- **Google Sheets import** — one tab per table, one column per language; no API key or OAuth.
+- **Synchronous lookups** — `Loc.Get("UI", "play")` with fallback to the default language.
+- **Placeholders** — `{0}`–`{7}` filled from string arguments.
+- **TMP integration** — `SetLocalizedText` extensions, including a zero-allocation path for per-frame text.
+- **`LocalizedText` component** — set a table and key in the Inspector; refreshes on language change.
+- **On-demand tables** — load and release level chunks or seasonal events through Addressables.
+- **Editor tooling** — Localization Manager window, key validation in the Inspector, per-component language preview.
+- **Odin Inspector support** when Odin is installed.
+
 ## Quick Start
 
-**1. Create the config asset**
+### 1. Author the spreadsheet
 
-`Assets > Create > TRnK > Localization > Localization Config` — place it anywhere (e.g. `Assets/Localization/LocalizationConfig.asset`).
+One spreadsheet, one tab per table. Each tab has a `Key` column followed by one column per language code:
 
-**2. Author your data in Google Sheets**
-
-One spreadsheet, one tab per table. Each tab has a `Key` column followed by
-one column per locale code:
-
-| Key | en | vi | ja |
+| Key | en | ja | vi |
 |---|---|---|---|
-| `play_button` | Play | Chơi | 再生 |
-| `quit_button` | Quit | Thoát | 終了 |
+| `play` | Play | プレイ | Chơi |
+| `welcome` | Welcome back, {0}! | おかえりなさい、{0}さん！ | Chào mừng trở lại, {0}! |
 
-Share it as *Anyone with the link → Viewer*, then open
-`Tools > TRnK > Localization Manager` → **Import** tab, paste the spreadsheet
-URL, and hit **Import from Spreadsheet**.
+Share it as *Anyone with the link → Viewer*.
 
-Each tab becomes one `LocalizationTable` asset (`UI.asset`, `Combat.asset`, …),
-created in the **Tables Folder** (the config's folder by default). Importing
-again updates those assets in place.
+### 2. Create the config
 
-**3. Initialize from your game bootstrap**
+`Assets > Create > TRnK > Localization > Localization Config`. The config holds the language list and the default language, both filled in by the import.
 
-`Loc.Initialize` takes a `LocalizationConfig` instance, which holds only settings (locales and the default locale). Load it however your project loads assets and pass it in. Then register the tables your first screen needs.
+### 3. Import
+
+Open `Tools > TRnK > Localization Manager`, select the config, then on the **Import** tab paste the spreadsheet URL and press **Import From Spreadsheet**. Each tab becomes a `LocalizationTable` asset (`UI.asset`, `Battle.asset`, …).
+
+### 4. Initialize at boot
 
 ```csharp
 using TRnK.Localization;
@@ -52,236 +60,172 @@ using UnityEngine;
 
 public class GameBootstrap : MonoBehaviour
 {
-    [SerializeField] LocalizationConfig _localizationConfig;
-    [SerializeField] LocalizationTable _uiTable; // always loaded
+    [SerializeField] private LocalizationConfig _config;
+    [SerializeField] private LocalizationTable _uiTable; // always loaded
 
-    void Awake()
+    private void Awake()
     {
-        // A null or unknown saved code falls back to the config's default locale
-        var save = SaveSystem.Load();
-        Loc.Initialize(_localizationConfig, save.languageCode);
+        // A null or unknown saved code falls back to the config's default language
+        Loc.Initialize(_config, SaveSystem.Load().languageCode);
         Loc.AddTable(_uiTable);
     }
 }
 ```
 
-Tables needed only now and then (a level chunk, a seasonal event) load on demand
-with `await Loc.LoadTableAsync("Event_Halloween")`, which requires Addressables.
-A table you reference directly shouldn't also be Addressable, or the build holds
-it twice: remove it from its Addressables group once, and later imports leave it
-alone.
-
-**4. Use it**
+## Getting Text
 
 ```csharp
-using TRnK.Localization;
+string label = Loc.Get("UI", "play");
 
-// In code
-string label = Loc.Get("UI", "play_button");
+// Placeholders {0}–{7}; format numbers yourself
+// "attack_hit" = "{0} attacks {1} for {2} damage."
+string line = Loc.Get("Battle", "attack_hit", "Aria", "Goblin", damage.ToString());
 
-// Smart strings — named placeholders
-// "deal_damage" = "Deal {damage} damage to {enemy}"
-string msg = Loc.Get("Combat", "deal_damage", ("damage", 42), ("enemy", "Goblin"));
+// Silent lookup: no warning, no missing marker
+if (Loc.TryGet("Battle", "skill_meteor", out string skill)) Show(skill);
+```
 
-// One-shot TMP extension
-_label.SetLocalizedText("UI", "play_button");
+- Lookups try the current language, then the default one. An empty cell counts as missing.
+- A missing key logs a warning and returns `#Table.key` in the Editor, `""` in builds.
+- Table names, keys and language codes ignore case.
+- `{{` and `}}` write literal braces. A placeholder without an argument stays as written and logs a warning.
 
-// Zero-allocation per-frame text — positional {0} placeholders, up to 3 float args
-// "score" = "Score: {0}"
-_scoreLabel.SetLocalizedText("UI", "score", score);
+## TextMeshPro
 
-// Format specifiers work too (TMP's own syntax)
+```csharp
+_label.SetLocalizedText("UI", "play");
+_goldLabel.SetLocalizedText("UI", "gold", gold.ToString());   // up to 8 string args
+_label.SetLocalizedText(_localizedString);
+
+// Zero-allocation for text that changes every frame, using TMP's own formatter (up to 3 floats)
 // "hp_bar" = "{0:0}/{1:0} HP"
 _hpLabel.SetLocalizedText("UI", "hp_bar", current, max);
+```
 
-// Auto-refreshing component (no code): Add Component > TRnK Localization > Localized Text
-// Set Table + Key in the Inspector. Refreshes automatically on locale change.
+These set the text once. Use `LocalizedText`, or listen to `LocaleChanged`, to refresh on language change.
 
-// Serializable reference
-[SerializeField] LocalizedString _tooltip;
-void Show() => _ui.SetText(_tooltip.Get());
+## LocalizedText and LocalizedString
 
-// React to language change
-void OnEnable()  => Loc.LocaleChanged += OnLocale;
-void OnDisable() => Loc.LocaleChanged -= OnLocale;
+**`LocalizedText`** — `Add Component > TRnK Localization > Localized Text` on a TMP object, then set the table and key. It reads its text when enabled and whenever the language changes.
 
-// Load a table before showing UI that uses it, release it after leaving that UI
-bool loaded = await Loc.LoadTableAsync("Level_101_200");
-Loc.ReleaseTable("Level_1_100");
-bool ready = Loc.HasTable("Level_101_200");
+**`LocalizedString`** — a serializable table + key pair for your own components:
 
-// A table the game references directly, or loaded through its own pipeline
-Loc.AddTable(myTable);
+```csharp
+[SerializeField] private LocalizedString _tooltip;
 
-// Language switcher
+private void Show() => _tooltipLabel.text = _tooltip.Get();
+```
+
+## Changing Language
+
+```csharp
 public void SetLanguage(string code)
 {
     Loc.SetLocale(code);
-    var save = SaveSystem.Load();
-    save.languageCode = code;
-    SaveSystem.Save(save);
+    SaveSystem.Save(code);
 }
+
+// Build a language menu from the config
+foreach (Locale locale in _config.Locales)
+    AddButton(locale.Name, locale.Code);   // "Japanese", "ja"
 ```
 
-## Behavior Reference
+Listen to `LocaleChanged` to refresh text you set yourself:
 
-**Missing key fallback chain:**
-1. Try current locale (empty string counts as missing)
-2. Fall back to default locale (if different)
-3. Editor: logs a warning and returns `#Table.key` · Player builds: returns `""`
+```csharp
+private void OnEnable()
+{
+    Loc.LocaleChanged += OnLocaleChanged;
+    Refresh();   // a disabled object misses changes, so refresh on enable too
+}
 
-**Initialization:** sets the locale to `initialLocale`, or the config's default when that is null or unknown. It registers no tables, so add them after it. Calling it again with the same asset keeps the registered tables and the current locale, applying `initialLocale` only if one is given; a different asset unregisters every table and releases the ones loaded from Addressables.
+private void OnDisable() => Loc.LocaleChanged -= OnLocaleChanged;
 
-**Tables:** `Loc.Get` reads only registered tables: those passed to `AddTable` or loaded with `LoadTableAsync`. A missing table logs *is not loaded*, then goes through the missing-key fallback above. `LocalizedText` reads its text on enable and on locale change only, so load a table before showing UI that uses it, and release it only after leaving that UI. Each table holds every locale, so `SetLocale` never reloads anything.
+private void OnLocaleChanged(string code) => Refresh();
+```
 
-**`LoadTableAsync`** completes with `true` once the table is registered, straight away if it already is. Two calls for the same table share one load. It completes with `false` when the table can't be loaded, e.g. a misspelled name or a table that isn't Addressable. Without Addressables it always completes with `false`; use `AddTable`. **`ReleaseTable`** unregisters a table and releases its Addressables handle.
+- `SetLocale` with a code the config doesn't list is ignored with a warning.
+- The first `Initialize` doesn't raise `LocaleChanged`; later language changes do.
+- A listener that throws is logged and doesn't stop the others. A listener whose object was destroyed without unsubscribing is removed with a warning.
 
-**`SetLocale`** with an unregistered code is ignored (with a warning). Setting the same locale twice doesn't re-fire `LocaleChanged`.
+## Loading Tables
 
-**Smart strings:** unknown `{placeholder}` names stay literal in the output (editor logs a warning); `{{` and `}}` escape literal braces; numeric arguments format with invariant culture.
+`Loc.Get` only reads registered tables. Add the ones you reference directly, and load the rest on demand:
 
-**Named vs positional:** `Loc.Get` uses **named** placeholders (`{damage}`) and returns a string. The TMP `SetLocalizedText` overloads use TMP's **positional** placeholders (`{0}`, `{1:00}`) and write straight into TMP's buffer — same package, two syntaxes, because the zero-allocation path is TMP's formatter, not ours.
+```csharp
+// Always-loaded tables, referenced from a component
+Loc.AddTable(_uiTable);
 
-**Key validation:** `LocalizedString` fields tint green when the (table, key) pair exists in the config selected in the Localization Manager, red when it doesn't (or is empty), and stay neutral when no config is selected. Green means the key *exists*, not that every locale has a value. Editing a `LocalizedText` to a valid key refreshes its TMP text immediately; invalid keys never touch the text.
+// On demand (requires Addressables)
+if (await Loc.LoadTableAsync("Level_101_200"))
+    Loc.ReleaseTable("Level_1_100");
 
-## Spreadsheet Workflow
+bool ready = Loc.HasTable("Event_Halloween");
+```
 
-The spreadsheet is the single source of truth. The config and table assets are
-build artifacts: imported from the sheet, never hand-edited.
+- `LoadTableAsync` completes with `false` if the table can't be loaded. Two calls for the same table share one load.
+- Load a table before showing UI that uses it, and release it after leaving that UI.
+- Each table holds every language, so `SetLocale` never reloads anything.
+
+## API Reference
+
+### Loc
+
+| Member | Description |
+|---|---|
+| `Initialize(config, initialLocale = null)` | Sets the config and starting language. Call once at boot. |
+| `IsReady` | Whether `Initialize` has run. |
+| `CurrentLocale` | Active language code. |
+| `SetLocale(code)` | Switches language and raises `LocaleChanged`. |
+| `LocaleChanged` | `event Action<string>` with the new code. |
+| `Get(table, key)` | Translated text, falling back to the default language. |
+| `Get(table, key, arg0 … arg7)` | Same, with `{0}`–`{7}` replaced. |
+| `TryGet(table, key, out value)` | Silent lookup; `false` when missing. |
+| `AddTable(table)` | Registers a table asset. |
+| `LoadTableAsync(table)` | Loads a table from Addressables; completes with `true` when registered. |
+| `ReleaseTable(table)` | Unregisters a table and releases its Addressables handle. |
+| `HasTable(table)` | Whether a table is registered. |
+
+### Other types
+
+| Type | Description |
+|---|---|
+| `LocalizationConfig` | `Locales` (code + name), `DefaultLocale`, `HasLocale(code)`. |
+| `LocalizationTable` | One imported tab: `TableName`, `Keys`, `Locales`, `ContainsKey`, `TryGetValue`. |
+| `LocalizedString` | Serializable table + key; `Get()`. |
+| `LocalizedText` | TMP component that refreshes on language change; `Refresh()`. |
+| `TMP_Text.SetLocalizedText(...)` | One-shot setters: no args, 1–8 strings, 1–3 floats, or a `LocalizedString`. |
+
+## Localization Manager
+
+Open via `Tools > TRnK > Localization Manager` and pick the config in the top bar.
 
 **Import tab**
 
-| Field | Value |
+| Field | Description |
 |---|---|
-| Spreadsheet URL | any URL of your spreadsheet |
-| Tables Folder | where the table assets live; empty = the config's folder |
-| Ignored Tabs | tabs to skip, e.g. `Rule` |
+| Spreadsheet URL | Any URL of the spreadsheet. |
+| Tables Folder | Where the table assets live. Empty uses the config's folder. |
+| Ignored Sheet Tabs | Tabs to skip, e.g. `Rule`. |
 
-With Odin Inspector installed, these fields are drawn by Odin.
+- Every tab that isn't ignored becomes a table of the same name. A tab whose first header isn't `Key` is skipped with a warning.
+- The language columns define the config's languages.
+- A typed `\n` in a cell becomes a line break.
+- Importing again updates existing assets in place, so references to them survive. A tab removed from the sheet has its asset moved to the trash. Use a separate Tables Folder per config.
+- Ctrl+Z undoes an import.
 
-The whole spreadsheet is downloaded once as `.xlsx` (no API key or OAuth), and
-every tab that isn't ignored becomes a `LocalizationTable` asset of the same
-name. A tab whose first header isn't `Key` is skipped with a warning. Locale
-columns in the header define the config's locales.
+**Tables tab** — read-only view of every table as a key × language grid, with search.
 
-Import is **Replace-All**, and the **Tables Folder** mirrors the sheet: every
-table is rewritten from it, existing assets are updated in place so references
-to them survive, and the asset of a tab that disappears from the sheet is moved
-to the trash. Use a separate Tables Folder for each config. The Console lists
-what was created and trashed, and Ctrl+Z undoes the table and config changes.
+**With Addressables** — each table the import creates is made Addressable at `Localization/<tablename>` (lowercase) in a `Localization` group, one bundle per table. After that the import leaves its Addressables setup alone, so you can move it to another group, or remove it from Addressables to reference it directly.
 
-With Addressables installed, a table the import creates is made Addressable at
-`Localization/<TableName>` in a `Localization` group, which packs each table in
-its own bundle so releasing one frees it. After that its Addressables setup is
-yours: move it to another group or remove it, and later imports leave it alone.
-
-**Tables tab** shows every table in the Tables Folder as a key × locale grid
-with search. The key validator and `LocalizedText` preview read the same tables.
-
-Requires the spreadsheet shared as *Anyone with the link → Viewer*.
-
-## Roadmap
-
-### v0.1 — Runtime Foundation ✅ (complete, tested)
-- Single-asset data model (`LocalizationConfig` holds all locales/tables/keys)
-- Synchronous `Loc` facade: `Initialize` (settings instance), `Get`, `SetLocale`, `LocaleChanged`, `IsReady`
-- Current-locale → default-locale fallback; empty values treated as missing
-- `LocalizedString` serializable reference + `LocalizedText` TMP component
-- `SetLocalizedText` TMP extensions
-- Odin/non-Odin dual support (`SerializedScriptableObject` base when present, custom drawer otherwise)
-
-### v0.2 — Authoring Workflow ✅ (code-complete; editor UI pending first Unity verification)
-- UI Toolkit editor window (`Tools > TRnK > Localization Manager`)
-- Tables tab: spreadsheet grid (`MultiColumnListView`), one row per key, one column per locale, inline editing, search, add/remove keys & tables
-- Locales tab: manage locales, default-locale dropdown, Sync Entries
-- Import/Export tab: CSV export (Excel-compatible, BOM); CSV import with diff preview, Merge/Replace modes, undo support
-- Validation tab: per-locale coverage bars, missing translations, duplicate keys, empty names
-- Robust CSV pipeline: BOM, quoted/multi-line fields, escaped quotes, comma/semicolon auto-detection (93 tests passing)
-
-### v0.3 — Developer Workflow ✅ (code-complete; pending first Unity verification)
-- Smart strings: `Loc.Get("Combat", "deal_damage", ("damage", 42), ("enemy", "Goblin"))` with named placeholders
-- Zero-allocation hot path: `tmpText.SetLocalizedText(table, key, arg0…arg2)` via TMP's `SetText(format, args)` — for HP bars / score counters updating every frame (positional placeholders, up to 3 float args)
-- Live key validation in every `LocalizedString` inspector: green = key exists, red = missing (Odin's own palette when Odin is installed); editing to a valid key auto-refreshes the `LocalizedText`'s TMP text
-- Editor settings stored as a project asset (`Assets/Plugins/TRnK/Localization/Editor/`) — no machine-global `EditorPrefs`
-
-### v0.4 — Single Source of Truth ✅ (implemented; sync verified against a live spreadsheet)
-
-**The spreadsheet becomes the only place translations are authored.** The config
-asset is a build artifact: synced from the sheet, never hand-edited. No merge
-modes, no reconciliation — the sheet always wins because nothing else writes.
-
-The window drops to three tabs:
-
-| Tab | Purpose | Editable |
-|---|---|---|
-| **Sync** | Sheet list + Sync; Export (seeds a new sheet / text backup) | sheet list only |
-| **Tables** | Browse tables, keys and translations, with search | read-only |
-| **Validation** | Coverage, missing values, duplicate keys — reported as *sheet* defects to fix upstream | read-only |
-
-**Setup:** paste the spreadsheet URL once, then list the tab names to sync —
-one tab per table, named as you want the table named:
-
-```
-Spreadsheet URL   https://docs.google.com/spreadsheets/d/<id>/edit
-Tabs              UI, Combat, Event
-```
-
-Each tab is fetched by name, no API key or OAuth:
-`https://docs.google.com/spreadsheets/d/<id>/gviz/tq?tqx=out:csv&sheet=<tab>`
-
-- Sync: fetch every listed tab as CSV over HTTPS → existing parse → existing diff preview → existing undoable apply. Always Replace-All; the download never writes anything, only **Apply** does
-- **All-or-nothing:** if any tab fails to fetch or parse, nothing reaches the preview — a partially-fetched sync under Replace-All would read as "that table was deleted"
-- Non-blocking fetch via `EditorApplication.update` polling — the editor never freezes; timeout plus cancel through Unity's background `Progress` API
-- Clear, named failures: tab not found, no network, sheet not link-shared (Google returns an HTML login page), empty response
-- Renaming a tab is a deliberate two-step: sync fails on the old name, you update the name in the list, and Replace-All carries the data to the new table
-- Locale names come from `CultureInfo` (`en` → English), so only codes are authored in the sheet
-- **Selected Language** dropdown on each `LocalizedText` previews its own text in any locale, in Edit Mode — per component, editor-only
-- Removed: inline table/key editing, locale list editing, Merge-vs-Replace modes, manual CSV import — every one of them a second writer
-
-**Requires** the spreadsheet shared as *Anyone with the link → Viewer*.
-
-### v0.6 — Per-Table Storage ✅
-
-- One flat `LocalizationTable` asset per spreadsheet tab (keys, locales, values arrays). Unity deserializes it straight into arrays, so there is no parse step at load and lookups are one dictionary hit
-- The config lists the tables; `Loc.AddTable` / `RemoveTable` / `HasTable` register others at runtime
-- `Loc.Initialize(config, initialLocale)` applies the saved language in one call
-
-### v0.7 — Simple Importer ✅
-
-- Two tabs: **Import** (URL, Tables Folder, Ignored Tabs, one button) and **Tables** (viewer)
-- The whole spreadsheet downloads once as `.xlsx`, so every tab is found automatically and quoted text can't merge rows
-- Removed: tab-name list, diff preview and Apply step, Validation tab, CSV export
-
-### v0.8 — Addressables ✅
-
-- Optional: with Addressables installed, the import makes new tables Addressable; the config holds settings only
-- `Loc.LoadTableAsync` / `Loc.ReleaseTable`; the same game code works without Addressables
-- Editor tools read tables from the Tables Folder, which mirrors the sheet
-
-### Rename Safety (planned)
-
-Renaming a spreadsheet tab renames its table. Code references break at compile
-time (good), but `LocalizedText` components store the table as a serialized
-string in scenes and prefabs — those go red in the inspector and must currently
-be fixed by hand.
-
-- Codegen table constants (`LocTable.CommonUI`) on import — stale **code** references become compile errors naming every file and line
-- Rename detection on import: when the table set changes from `{UI, …}` to `{Common UI, …}`, offer a migration that rewrites the stored table string across all scenes and prefabs
-
-### v1.0 — Release (planned)
-- Codegen key constants (`Keys.UI.PlayButton`) — extends Rename Safety's table constants down to keys, so a missing key fails the build
-- Sample scenes and common patterns
-- Full API documentation
-
-### Explicitly out of scope (by design)
-- Per-locale streaming — each table holds every locale; splitting tables by language adds complexity for negligible memory savings
-- ICU plural rules, RTL support, XLIFF, post-ship remote updates — enterprise-scale features; use Unity Localization if you need these
+**In the Inspector** — `LocalizedString` fields turn green when the key exists in the selected config and red when it doesn't. Each `LocalizedText` has a **Selected Language** dropdown that previews its text in Edit Mode.
 
 ## Requirements
 
 - Unity 6 or later
 - [TRnK Toolkit](https://github.com/trnkdev/unity-trnk-toolkit) (`com.trnkdev.unitytoolkit`)
 - TextMeshPro
+- Optional: Addressables, Odin Inspector
 
 ## License
 

@@ -35,7 +35,7 @@ namespace TRnK.Localization
             value = null;
             if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(localeCode)) return false;
 
-            int column = Array.IndexOf(_locales, localeCode);
+            int column = IndexOfLocale(localeCode);
             if (column < 0 || !RowByKey.TryGetValue(key, out int row)) return false;
 
             value = _values[row * _locales.Length + column];
@@ -45,13 +45,24 @@ namespace TRnK.Localization
         /// <summary>Value at a key row and locale column.</summary>
         public string GetValue(int row, int localeIndex) => _values[row * _locales.Length + localeIndex];
 
-        public int IndexOfLocale(string localeCode) => Array.IndexOf(_locales, localeCode);
+        /// <summary>Column of a locale code, matched ignoring case, or -1.</summary>
+        public int IndexOfLocale(string localeCode)
+        {
+            // The service passes the config's own spelling, so the exact match nearly always hits
+            int column = Array.IndexOf(_locales, localeCode);
+            if (column >= 0 || localeCode == null) return column;
+
+            for (int i = 0; i < _locales.Length; i++)
+                if (string.Equals(_locales[i], localeCode, StringComparison.OrdinalIgnoreCase))
+                    return i;
+            return -1;
+        }
 
         private Dictionary<string, int> RowByKey => _rowByKey ??= BuildIndex();
 
         private Dictionary<string, int> BuildIndex()
         {
-            var index = new Dictionary<string, int>(_keys.Length, StringComparer.Ordinal);
+            var index = new Dictionary<string, int>(_keys.Length, StringComparer.OrdinalIgnoreCase);
 
             if (_values.Length != _keys.Length * _locales.Length)
             {
