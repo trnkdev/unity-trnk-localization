@@ -1,3 +1,16 @@
+## [0.9.1] - 2026-11-19
+
+### Editor Polish
+
+- Add a summary Inspector for `LocalizationTable` assets with an **Open in Localization Manager** button, replacing the per-cell fields.
+- Tables tab: searching or switching tables keeps column widths and scroll instead of rebuilding the grid.
+- Tables tab: text shows as typed, so rich-text tags can be checked against the sheet.
+- Tables tab: double-click fit-to-content now measures with the same font as the cells, and works on every grid.
+- Tables tab: key column text is readable on the light editor skin.
+- Fixed selecting a `LocalizedText` marking its scene or prefab as changed.
+- Fixed the Localization Manager reading or saving a temporary copy of its settings right after a script reload, which could lose the selected config or edits.
+- The status bar updates after an import.
+
 ## [0.9.0] - 2026-11-19
 
 ### Lookups

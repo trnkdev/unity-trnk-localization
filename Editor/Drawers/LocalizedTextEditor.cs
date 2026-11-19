@@ -81,13 +81,8 @@ namespace TRnK.Localization
                 if (locale.Code == _previewProp.stringValue) current = i;
             }
 
-            // Unset, or a locale the sheet no longer has — fall back to the default locale
-            if (current < 0)
-            {
-                current = DefaultLocaleIndex(config);
-                _previewProp.stringValue = config.Locales[current].Code;
-                serializedObject.ApplyModifiedProperties();
-            }
+            // Shown, not written, so selecting never marks the scene changed
+            if (current < 0) current = DefaultLocaleIndex(config);
 
             EditorGUI.BeginChangeCheck();
             int selected = EditorGUILayout.Popup(

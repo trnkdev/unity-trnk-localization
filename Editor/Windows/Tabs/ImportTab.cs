@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using TRnK.Logger;
-using TRnK.Toolkit;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -33,9 +32,12 @@ namespace TRnK.Localization
         public string Title => "Import";
         public VisualElement Root { get; }
 
+        private const string LoadingMessage = "Loading the localization editor settings…";
+
         private readonly VisualElement _body;
         private LocalizationConfig _config;
         private bool _isImporting;
+        private bool _rebuildScheduled;
 
 #if ODIN_INSPECTOR
         // Matches Odin's large button and the green PC's importer uses
@@ -76,6 +78,22 @@ namespace TRnK.Localization
 
             var settings = LocalizationEditorSettings.GetOrCreate();
 
+            // Editing the stand-in would lose the edits, so wait for the real asset
+            if (!settings.IsLoaded)
+            {
+                _body.Add(new HelpBox(LoadingMessage, HelpBoxMessageType.Info));
+                if (!_rebuildScheduled)
+                {
+                    _rebuildScheduled = true;
+                    EditorApplication.delayCall += () =>
+                    {
+                        _rebuildScheduled = false;
+                        Rebuild();
+                    };
+                }
+                return;
+            }
+
             _body.Add(LocalizationStyles.Header("Spreadsheet"));
             _body.Add(new HelpBox(SheetHelp, HelpBoxMessageType.Info));
 
@@ -105,7 +123,7 @@ namespace TRnK.Localization
 
                 tree.UpdateTree();
                 tree.Draw(false);
-                if (tree.ApplyChanges()) EditorAssetUtils.MarkDirtyAndSave(settings);
+                if (tree.ApplyChanges()) settings.Save();
                 tree.InvokeDelayedActions();
 
                 GUILayout.Space(OdinButtonSpacing);

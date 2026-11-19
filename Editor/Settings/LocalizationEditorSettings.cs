@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System.Collections.Generic;
 using TRnK.Toolkit;
+using UnityEditor;
 using UnityEngine;
 
 #if ODIN_INSPECTOR
@@ -51,7 +52,7 @@ namespace TRnK.Localization
             {
                 if (_spreadsheetUrl == value) return;
                 _spreadsheetUrl = value;
-                EditorAssetUtils.MarkDirtyAndSave(this);
+                Save();
             }
         }
 
@@ -62,7 +63,7 @@ namespace TRnK.Localization
         {
             _ignoredTabs.Clear();
             _ignoredTabs.AddRange(names);
-            EditorAssetUtils.MarkDirtyAndSave(this);
+            Save();
         }
 
         /// <summary>Folder for new table assets. Empty means the config's folder.</summary>
@@ -73,7 +74,7 @@ namespace TRnK.Localization
             {
                 if (_tablesFolder == value) return;
                 _tablesFolder = value;
-                EditorAssetUtils.MarkDirtyAndSave(this);
+                Save();
             }
         }
 
@@ -85,8 +86,17 @@ namespace TRnK.Localization
             {
                 if (_activeConfig == value) return;
                 _activeConfig = value;
-                EditorAssetUtils.MarkDirtyAndSave(this);
+                Save();
             }
+        }
+
+        /// <summary>False for the unsaved stand-in handed out while the settings asset is still importing.</summary>
+        internal bool IsLoaded => EditorUtility.IsPersistent(this);
+
+        /// <summary>Saves the settings asset; the unsaved stand-in is never saved.</summary>
+        internal void Save()
+        {
+            if (IsLoaded) EditorAssetUtils.MarkDirtyAndSave(this);
         }
 
         internal static LocalizationEditorSettings GetOrCreate() =>

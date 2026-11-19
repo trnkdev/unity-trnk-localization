@@ -10,9 +10,6 @@ namespace TRnK.Localization
         /// <summary>Vertical rule between grid columns.</summary>
         internal static readonly Color ColumnDivider = new(0f, 0f, 0f, 0.25f);
 
-        /// <summary>Identifier text — brighter than values so the key column anchors each row.</summary>
-        internal static readonly Color KeyText = new(0.85f, 0.87f, 0.92f);
-
         internal static Label Header(string text)
         {
             var label = new Label(text);

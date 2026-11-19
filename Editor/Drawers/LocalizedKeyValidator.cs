@@ -82,13 +82,23 @@ namespace TRnK.Localization
             LocalizationService.ClearEditorLookup();
         }
 
+        // Fields validate on every repaint, so the index is rebuilt only when TableAssets rescans
+        private static IReadOnlyList<LocalizationTable> s_indexedTables;
+        private static Dictionary<string, LocalizationTable> s_tablesByName;
+
         private static Dictionary<string, LocalizationTable> TablesByName(LocalizationConfig config)
         {
-            var tables = new Dictionary<string, LocalizationTable>(StringComparer.OrdinalIgnoreCase);
-            foreach (var table in TableAssets.For(config))
+            var tables = TableAssets.For(config);
+            if (ReferenceEquals(tables, s_indexedTables)) return s_tablesByName;
+
+            var byName = new Dictionary<string, LocalizationTable>(StringComparer.OrdinalIgnoreCase);
+            foreach (var table in tables)
                 if (table != null && !string.IsNullOrEmpty(table.TableName))
-                    tables.TryAdd(table.TableName, table);
-            return tables;
+                    byName.TryAdd(table.TableName, table);
+
+            s_indexedTables = tables;
+            s_tablesByName = byName;
+            return byName;
         }
     }
 }

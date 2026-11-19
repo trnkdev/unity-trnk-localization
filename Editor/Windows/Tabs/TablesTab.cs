@@ -1,7 +1,6 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
-using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -20,8 +19,12 @@ namespace TRnK.Localization
         private const string KeyColumnTitle = "Key";
         private const string CellLabelName = "cell-label";
         private const int HorizontalScrollLocaleCount = 4;
-        private const float AutoFitPadding = 20f;
+        private const float CellPaddingX = 6f;
+        private const float CellPaddingY = 3f;
+        private const float MissingValueOpacity = 0.35f;
+        private const float AutoFitPadding = 8f;
         private const float AutoFitMaxWidth = 600f;
+        private const string ResizeHandleClass = "unity-multi-column-header__column-resize-handle";
 
         public string Title => "Tables";
         public VisualElement Root { get; }
@@ -33,11 +36,12 @@ namespace TRnK.Localization
         private readonly List<string> _tableNames = new();
         private int _selectedTableIndex = -1;
 
-        private VisualElement _rightPane;
         private VisualElement _gridHost;
         private Label _statusLabel;
         private MultiColumnListView _grid;
-        private ToolbarSearchField _search;
+        private string _gridLocales;
+        private Label _measureLabel;
+        private Label _measureKeyLabel;
         private string _searchFilter = string.Empty;
 
         private readonly List<int> _visibleEntryIndices = new();
@@ -53,12 +57,39 @@ namespace TRnK.Localization
             BuildRightPane();
         }
 
+        public void OnConfigChanged(LocalizationConfig config)
+        {
+            _config = config;
+            RefreshTableList();
+            ShowSelectedTable();
+        }
+
+        public void OnSelected()
+        {
+            RefreshTableList();
+            ShowSelectedTable();
+        }
+
+        /// <summary>Selects a table if it is one of the config's tables.</summary>
+        internal void Select(LocalizationTable table)
+        {
+            RefreshTableList();
+
+            for (int i = 0; i < _tables.Count; i++)
+            {
+                if (_tables[i] != table) continue;
+
+                _tableList.SetSelection(i);
+                return;
+            }
+        }
+
         private void BuildLeftPane()
         {
             var left = new VisualElement { name = "tables-left" };
             left.style.width = 180;
             left.style.borderRightWidth = 1;
-            left.style.borderRightColor = new Color(0, 0, 0, 0.3f);
+            left.style.borderRightColor = LocalizationStyles.ColumnDivider;
 
             var header = new Label("Tables");
             header.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -84,24 +115,30 @@ namespace TRnK.Localization
 
         private void BuildRightPane()
         {
-            _rightPane = new VisualElement { name = "tables-right" };
-            _rightPane.style.flexGrow = 1;
+            var right = new VisualElement { name = "tables-right" };
+            right.style.flexGrow = 1;
 
             var toolbar = new VisualElement { style = { flexDirection = FlexDirection.Row, paddingTop = 4, paddingBottom = 4, paddingLeft = 4 } };
 
-            _search = new ToolbarSearchField { tooltip = SearchTooltip };
-            _search.style.flexGrow = 1;
-            _search.RegisterValueChangedCallback(evt =>
+            var search = new ToolbarSearchField { tooltip = SearchTooltip };
+            search.style.flexGrow = 1;
+            search.RegisterValueChangedCallback(evt =>
             {
                 _searchFilter = evt.newValue ?? string.Empty;
-                RebuildGrid();
+                ShowSelectedTable();
             });
-            toolbar.Add(_search);
-            _rightPane.Add(toolbar);
+            toolbar.Add(search);
+            right.Add(toolbar);
 
             // The grid lives in its own host so the status bar below is never rebuilt or scrolled
             _gridHost = new VisualElement { style = { flexGrow = 1 } };
-            _rightPane.Add(_gridHost);
+            right.Add(_gridHost);
+
+            // Hidden labels styled like the cells, so fit-to-content measures with the same font
+            _measureLabel = MakeMeasureLabel(FontStyle.Normal);
+            _measureKeyLabel = MakeMeasureLabel(FontStyle.Bold);
+            right.Add(_measureLabel);
+            right.Add(_measureKeyLabel);
 
             _statusLabel = new Label();
             _statusLabel.style.unityTextAlign = TextAnchor.MiddleRight;
@@ -112,36 +149,19 @@ namespace TRnK.Localization
             _statusLabel.style.flexShrink = 0;
             _statusLabel.style.borderTopWidth = 1;
             _statusLabel.style.borderTopColor = LocalizationStyles.ColumnDivider;
-            _rightPane.Add(_statusLabel);
+            right.Add(_statusLabel);
 
-            Root.Add(_rightPane);
-        }
-
-        public void OnConfigChanged(LocalizationConfig config)
-        {
-            _config = config;
-            RefreshTableList();
-            RebuildGrid();
-        }
-
-        public void OnSelected()
-        {
-            RefreshTableList();
-            RebuildGrid();
+            Root.Add(right);
         }
 
         private void RefreshTableList()
         {
             _tableNames.Clear();
             _tables = TableAssets.For(_config);
-            if (_config != null)
-            {
-                foreach (var table in _tables)
-                    _tableNames.Add(table == null ? "(missing asset)"
-                        : string.IsNullOrEmpty(table.TableName) ? "(unnamed)" : table.TableName);
-            }
+            foreach (var table in _tables)
+                _tableNames.Add(string.IsNullOrEmpty(table.TableName) ? "(unnamed)" : table.TableName);
 
-            _tableList?.RefreshItems();
+            _tableList.RefreshItems();
 
             if (_tableNames.Count > 0)
             {
@@ -157,17 +177,16 @@ namespace TRnK.Localization
         private void OnTableSelected(int index)
         {
             _selectedTableIndex = index;
-            RebuildGrid();
+            ShowSelectedTable();
+            if (_grid != null && _visibleEntryIndices.Count > 0) _grid.ScrollToItem(0);
         }
 
-        private void RebuildGrid()
+        // Rows refresh in place, so column widths survive searching and switching tables
+        private void ShowSelectedTable()
         {
-            if (_grid != null && _grid.parent != null)
-                _grid.parent.Remove(_grid);
-            _grid = null;
-
             if (SelectedTable == null)
             {
+                RemoveGrid();
                 ShowEmptyState();
                 UpdateStatus();
                 return;
@@ -175,13 +194,30 @@ namespace TRnK.Localization
 
             RemoveEmptyState();
             BuildVisibleIndices();
+            EnsureGrid();
+            _grid.RefreshItems();
+            UpdateStatus();
+        }
+
+        // Columns follow the config's locales, so the grid is only rebuilt when those change
+        private void EnsureGrid()
+        {
+            var locales = _config.Locales;
+            var codes = new string[locales.Count];
+            for (int i = 0; i < codes.Length; i++) codes[i] = locales[i].Code;
+
+            string signature = string.Join("\n", codes);
+            if (_grid != null && signature == _gridLocales) return;
+
+            RemoveGrid();
+            _gridLocales = signature;
 
             // Grow (not GrowAndFill) so columns keep their width past the viewport and scroll horizontally
-            var stretchMode = _config.Locales.Count > HorizontalScrollLocaleCount
-                ? Columns.StretchMode.Grow
-                : Columns.StretchMode.GrowAndFill;
-
-            var columns = new Columns { stretchMode = stretchMode, resizable = true };
+            var columns = new Columns
+            {
+                stretchMode = codes.Length > HorizontalScrollLocaleCount ? Columns.StretchMode.Grow : Columns.StretchMode.GrowAndFill,
+                resizable = true,
+            };
 
             columns.Add(new Column
             {
@@ -194,12 +230,12 @@ namespace TRnK.Localization
                 bindCell = BindKeyCell,
             });
 
-            var locales = _config.Locales;
-            for (int li = 0; li < locales.Count; li++)
+            foreach (string code in codes)
             {
-                string localeCode = locales[li].Code;
+                string localeCode = code;
                 columns.Add(new Column
                 {
+                    name = localeCode,
                     title = string.IsNullOrEmpty(localeCode) ? "(?)" : localeCode,
                     minWidth = LocaleColumnMinWidth,
                     stretchable = true,
@@ -220,55 +256,60 @@ namespace TRnK.Localization
                 showAlternatingRowBackgrounds = AlternatingRowBackground.ContentOnly,
             };
             _grid.style.flexGrow = 1;
-            _gridHost.Add(_grid);
 
-            RegisterAutoFit(columns);
-            UpdateStatus();
+            // The header and its resize handles exist only once the grid is laid out
+            _grid.RegisterCallback<GeometryChangedEvent>(RegisterAutoFit);
+            _gridHost.Add(_grid);
         }
 
-        // Unity has no built-in fit-to-content, so a double-click on a header divider
-        // measures the column's widest text and resizes to it, like a spreadsheet.
-        private void RegisterAutoFit(Columns columns)
+        private void RemoveGrid()
         {
-            var header = _grid.Q("unity-multi-column-header");
-            if (header == null) return;
+            _grid?.RemoveFromHierarchy();
+            _grid = null;
+            _gridLocales = null;
+        }
 
-            var handles = header.Query(className: "unity-multi-column-header__column-resize-handle").ToList();
+        // Unity has no built-in fit-to-content, so a double-click on a header divider resizes to the widest text
+        private void RegisterAutoFit(GeometryChangedEvent evt)
+        {
+            var grid = (MultiColumnListView)evt.target;
+            grid.UnregisterCallback<GeometryChangedEvent>(RegisterAutoFit);
+
+            var handles = grid.Query(className: ResizeHandleClass).ToList();
+            var columns = grid.columns;
 
             for (int i = 0; i < handles.Count && i < columns.Count; i++)
             {
                 var column = columns[i];
-                handles[i].RegisterCallback<MouseDownEvent>(evt =>
+                handles[i].RegisterCallback<MouseDownEvent>(down =>
                 {
-                    if (evt.clickCount < 2) return;
+                    if (down.clickCount < 2) return;
 
                     column.width = MeasureColumnWidth(column);
-                    evt.StopPropagation();
+                    down.StopPropagation();
                 });
             }
         }
 
         private float MeasureColumnWidth(Column column)
         {
-            bool isKeyColumn = column.title == KeyColumnTitle;
-            var style = isKeyColumn ? EditorStyles.boldLabel : EditorStyles.label;
-
-            float widest = style.CalcSize(new GUIContent(column.title.ToString())).x;
+            bool isKeyColumn = string.IsNullOrEmpty(column.name);
+            var probe = isKeyColumn ? _measureKeyLabel : _measureLabel;
             var table = SelectedTable;
 
+            float widest = MeasureText(probe, column.title);
             foreach (int row in _visibleEntryIndices)
             {
-                if (row >= table.Keys.Count) continue;
-
-                string text = isKeyColumn ? table.Keys[row] : ValueFor(table, row, column.title.ToString());
-                if (string.IsNullOrEmpty(text)) continue;
-
-                float width = style.CalcSize(new GUIContent(text)).x;
-                if (width > widest) widest = width;
+                string text = isKeyColumn ? table.Keys[row] : ValueFor(table, row, column.name);
+                if (!string.IsNullOrEmpty(text)) widest = Mathf.Max(widest, MeasureText(probe, text));
             }
 
-            return Mathf.Clamp(widest + AutoFitPadding, LocaleColumnMinWidth, AutoFitMaxWidth);
+            float minWidth = isKeyColumn ? KeyColumnMinWidth : LocaleColumnMinWidth;
+            return Mathf.Clamp(widest + CellPaddingX * 2f + AutoFitPadding, minWidth, AutoFitMaxWidth);
         }
+
+        private static float MeasureText(TextElement probe, string text)
+            => probe.MeasureTextSize(text, 0f, VisualElement.MeasureMode.Undefined, 0f, VisualElement.MeasureMode.Undefined).x;
 
         private static string ValueFor(LocalizationTable table, int row, string localeCode)
         {
@@ -284,8 +325,6 @@ namespace TRnK.Localization
         // Updates the pinned status bar; it is created once, so it never duplicates or scrolls away
         private void UpdateStatus()
         {
-            if (_statusLabel == null) return;
-
             var table = SelectedTable;
             if (table == null)
             {
@@ -299,6 +338,27 @@ namespace TRnK.Localization
             _statusLabel.text = shown == total ? $"{total} keys" : $"{shown} of {total} keys";
         }
 
+        // Tags and escapes show as typed, so a translator can check them against the sheet
+        private static Label MakeCellLabel()
+        {
+            var label = new Label { name = CellLabelName, enableRichText = false, parseEscapeSequences = false };
+            label.style.paddingLeft = CellPaddingX;
+            label.style.paddingRight = CellPaddingX;
+            label.style.paddingTop = CellPaddingY;
+            label.style.paddingBottom = CellPaddingY;
+            label.style.unityTextAlign = TextAnchor.UpperLeft;
+            return label;
+        }
+
+        private static Label MakeMeasureLabel(FontStyle fontStyle)
+        {
+            var label = MakeCellLabel();
+            label.style.unityFontStyleAndWeight = fontStyle;
+            label.style.position = Position.Absolute;
+            label.style.visibility = Visibility.Hidden;
+            return label;
+        }
+
         // The divider lives on a full-height wrapper; a label sizes to its own text,
         // so a border on it would stop short on rows where a neighbour wrapped.
         private static VisualElement MakeCell()
@@ -308,12 +368,7 @@ namespace TRnK.Localization
             cell.style.borderRightWidth = 1;
             cell.style.borderRightColor = LocalizationStyles.ColumnDivider;
 
-            var label = new Label { name = CellLabelName };
-            label.style.paddingLeft = 6;
-            label.style.paddingRight = 6;
-            label.style.paddingTop = 3;
-            label.style.paddingBottom = 3;
-            label.style.unityTextAlign = TextAnchor.UpperLeft;
+            var label = MakeCellLabel();
 
             // Long values wrap instead of being clipped when a column is narrowed
             label.style.whiteSpace = WhiteSpace.Normal;
@@ -328,7 +383,6 @@ namespace TRnK.Localization
             var cell = MakeCell();
             var label = CellLabel(cell);
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            label.style.color = LocalizationStyles.KeyText;
 
             // Identifiers are single tokens — wrapping one mid-word hurts more than clipping it
             label.style.whiteSpace = WhiteSpace.NoWrap;
@@ -380,13 +434,13 @@ namespace TRnK.Localization
             // An em dash makes a gap visible; blank space reads as a narrow column
             bool missing = string.IsNullOrEmpty(value);
             label.text = missing ? MissingValueMark : value;
-            label.style.opacity = missing ? 0.35f : 1f;
+            label.style.opacity = missing ? MissingValueOpacity : 1f;
         }
 
+        // Recreated each time, so the message follows the current config
         private void ShowEmptyState()
         {
-            if (_emptyState != null) return;
-
+            RemoveEmptyState();
             _emptyState = new HelpBox(_config == null
                 ? "Select a LocalizationConfig asset above."
                 : "No tables yet. Import your spreadsheet to fill this config.", HelpBoxMessageType.Info);
@@ -396,8 +450,7 @@ namespace TRnK.Localization
 
         private void RemoveEmptyState()
         {
-            if (_emptyState != null && _emptyState.parent != null)
-                _emptyState.parent.Remove(_emptyState);
+            _emptyState?.RemoveFromHierarchy();
             _emptyState = null;
         }
     }

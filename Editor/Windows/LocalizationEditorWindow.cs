@@ -23,13 +23,40 @@ namespace TRnK.Localization
         private ITab _activeTab;
 
         private LocalizationConfig _config;
+        private TablesTab _tablesTab;
+        private LocalizationTable _pendingTable;
 
         [MenuItem(MenuPath)]
-        private static void Open()
+        private static void Open() => OpenWindow();
+
+        /// <summary>Opens the window on the Tables tab with the given table selected.</summary>
+        internal static void ShowTable(LocalizationTable table)
+        {
+            var win = OpenWindow();
+            win._pendingTable = table;
+            win.SelectPendingTable();
+        }
+
+        private static LocalizationEditorWindow OpenWindow()
         {
             var win = GetWindow<LocalizationEditorWindow>(TitleText);
             win.minSize = new Vector2(720, 420);
             win.Show();
+            return win;
+        }
+
+        private void OnEnable() => EditorApplication.projectChanged += UpdateStatus;
+
+        private void OnDisable() => EditorApplication.projectChanged -= UpdateStatus;
+
+        // Waits until CreateGUI has built the tabs and the saved config is applied
+        private void SelectPendingTable()
+        {
+            if (_pendingTable == null || _tablesTab == null || _config == null) return;
+
+            SelectTab(_tablesTab);
+            _tablesTab.Select(_pendingTable);
+            _pendingTable = null;
         }
 
         private void CreateGUI()
@@ -85,10 +112,11 @@ namespace TRnK.Localization
 
         private void InitTabs()
         {
+            _tablesTab = new TablesTab();
             _tabs = new ITab[]
             {
                 new ImportTab(),
-                new TablesTab(),
+                _tablesTab,
             };
 
             foreach (var tab in _tabs)
@@ -141,10 +169,21 @@ namespace TRnK.Localization
 
         private void RestoreLastSettings()
         {
-            var config = LocalizationEditorSettings.GetOrCreate().ActiveConfig;
-            if (config == null) { UpdateStatus(); return; }
+            // Closed while waiting for the settings
+            if (this == null) return;
 
-            ApplyConfig(config);
+            // Right after a reload the settings asset may not load yet; its stand-in has no config
+            var settings = LocalizationEditorSettings.GetOrCreate();
+            if (!settings.IsLoaded)
+            {
+                EditorApplication.delayCall += RestoreLastSettings;
+                return;
+            }
+
+            if (settings.ActiveConfig == null) UpdateStatus();
+            else ApplyConfig(settings.ActiveConfig);
+
+            SelectPendingTable();
         }
 
         private void BroadcastToTabs()
