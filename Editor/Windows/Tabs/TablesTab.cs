@@ -70,20 +70,6 @@ namespace TRnK.Localization
             ShowSelectedTable();
         }
 
-        /// <summary>Selects a table if it is one of the config's tables.</summary>
-        internal void Select(LocalizationTable table)
-        {
-            RefreshTableList();
-
-            for (int i = 0; i < _tables.Count; i++)
-            {
-                if (_tables[i] != table) continue;
-
-                _tableList.SetSelection(i);
-                return;
-            }
-        }
-
         private void BuildLeftPane()
         {
             var left = new VisualElement { name = "tables-left" };

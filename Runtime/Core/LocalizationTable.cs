@@ -3,16 +3,34 @@ using System.Collections.Generic;
 using TRnK.Logger;
 using UnityEngine;
 
+#if ODIN_INSPECTOR
+using Sirenix.OdinInspector;
+#endif
+
 namespace TRnK.Localization
 {
     /// <summary>Translations of one spreadsheet tab, written by the spreadsheet import.</summary>
     public sealed class LocalizationTable : ScriptableObject
     {
+#if ODIN_INSPECTOR
+        [ReadOnly]
+#endif
         [SerializeField] private string _tableName;
+
+#if ODIN_INSPECTOR
+        [ReadOnly]
+#endif
         [SerializeField] private string[] _locales = Array.Empty<string>();
+
+#if ODIN_INSPECTOR
+        [ReadOnly]
+#endif
         [SerializeField] private string[] _keys = Array.Empty<string>();
 
         // Row-major: [row * _locales.Length + column]
+#if ODIN_INSPECTOR
+        [ReadOnly]
+#endif
         [SerializeField] private string[] _values = Array.Empty<string>();
 
         [NonSerialized] private Dictionary<string, int> _rowByKey;
@@ -43,10 +61,10 @@ namespace TRnK.Localization
         }
 
         /// <summary>Value at a key row and locale column.</summary>
-        public string GetValue(int row, int localeIndex) => _values[row * _locales.Length + localeIndex];
+        internal string GetValue(int row, int localeIndex) => _values[row * _locales.Length + localeIndex];
 
         /// <summary>Column of a locale code, matched ignoring case, or -1.</summary>
-        public int IndexOfLocale(string localeCode)
+        internal int IndexOfLocale(string localeCode)
         {
             // The service passes the config's own spelling, so the exact match nearly always hits
             int column = Array.IndexOf(_locales, localeCode);

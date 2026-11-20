@@ -1,3 +1,11 @@
+## [1.0.0] - 2026-11-19
+
+### Milestone
+
+- First 1.0 release, matching Profile Clue's production localization feature for feature.
+- `LocalizationTable.GetValue` and `IndexOfLocale` are internal; read text with `Loc.Get`, `Loc.TryGet` or `LocalizationTable.TryGetValue`.
+- Table assets use the normal Inspector again, read-only with Odin; the summary Inspector and its **Open in Localization Manager** button are removed.
+
 ## [0.9.1] - 2026-11-19
 
 ### Editor Polish

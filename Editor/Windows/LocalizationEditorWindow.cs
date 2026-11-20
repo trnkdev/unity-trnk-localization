@@ -23,26 +23,13 @@ namespace TRnK.Localization
         private ITab _activeTab;
 
         private LocalizationConfig _config;
-        private TablesTab _tablesTab;
-        private LocalizationTable _pendingTable;
 
         [MenuItem(MenuPath)]
-        private static void Open() => OpenWindow();
-
-        /// <summary>Opens the window on the Tables tab with the given table selected.</summary>
-        internal static void ShowTable(LocalizationTable table)
-        {
-            var win = OpenWindow();
-            win._pendingTable = table;
-            win.SelectPendingTable();
-        }
-
-        private static LocalizationEditorWindow OpenWindow()
+        private static void Open()
         {
             var win = GetWindow<LocalizationEditorWindow>(TitleText);
             win.minSize = new Vector2(720, 420);
             win.Show();
-            return win;
         }
 
         private void OnEnable() => EditorApplication.projectChanged += UpdateStatus;
@@ -53,16 +40,6 @@ namespace TRnK.Localization
         private void OnLostFocus() => LocalizationEditorSettings.GetOrCreate().Save();
 
         private void OnDestroy() => LocalizationEditorSettings.GetOrCreate().Save();
-
-        // Waits until CreateGUI has built the tabs and the saved config is applied
-        private void SelectPendingTable()
-        {
-            if (_pendingTable == null || _tablesTab == null || _config == null) return;
-
-            SelectTab(_tablesTab);
-            _tablesTab.Select(_pendingTable);
-            _pendingTable = null;
-        }
 
         private void CreateGUI()
         {
@@ -117,11 +94,10 @@ namespace TRnK.Localization
 
         private void InitTabs()
         {
-            _tablesTab = new TablesTab();
             _tabs = new ITab[]
             {
                 new ImportTab(),
-                _tablesTab,
+                new TablesTab(),
             };
 
             foreach (var tab in _tabs)
@@ -187,8 +163,6 @@ namespace TRnK.Localization
 
             if (settings.ActiveConfig == null) UpdateStatus();
             else ApplyConfig(settings.ActiveConfig);
-
-            SelectPendingTable();
         }
 
         private void BroadcastToTabs()

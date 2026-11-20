@@ -217,8 +217,6 @@ Open via `Tools > TRnK > Localization Manager` and pick the config in the top ba
 
 **Tables tab** — read-only view of every table as a key × language grid, with search by key. Text shows exactly as typed in the sheet, rich-text tags included. Double-click a column divider to fit the column to its text.
 
-**Table assets** — selecting a `LocalizationTable` shows its name, key count and languages, with an **Open in Localization Manager** button.
-
 **With Addressables** — each table the import creates is made Addressable at `Localization/<tablename>` (lowercase) in a `Localization` group, one bundle per table. After that the import leaves its Addressables setup alone, so you can move it to another group, or remove it from Addressables to reference it directly.
 
 **In the Inspector** — `LocalizedString` fields turn green when the key exists in the selected config and red when it doesn't. Each `LocalizedText` has a **Selected Language** dropdown that previews its text in Edit Mode.
